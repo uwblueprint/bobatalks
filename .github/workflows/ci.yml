@@ -1,0 +1,24 @@
+name: Code Quality
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - run: npm ci
+
+      # ✅ Type check
+      - run: npx tsc --noEmit
+
+      # ✅ Linting
+      - run: npm run lint
+
+      # ✅ Prettier formatting check
+      - run: npm run format -- --check .
