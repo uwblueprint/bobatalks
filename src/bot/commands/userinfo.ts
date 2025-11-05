@@ -30,7 +30,7 @@ export async function userinfoCommand(interaction: ChatInputCommandInteraction) 
     embed.addFields(
       {
         name: '📥 Joined Server',
-        value: `<t:${Math.floor(member.joinedTimestamp ?? 0 / 1000)}:R>`,
+        value: `<t:${Math.floor((member.joinedTimestamp ?? 0) / 1000)}:R>`,
         inline: true,
       },
       {

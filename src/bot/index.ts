@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-import { Client, GatewayIntentBits, Interaction } from 'discord.js';
+import { Client, Events, GatewayIntentBits, Interaction } from 'discord.js';
 
 import { pingCommand } from './commands/ping.js';
 import { pollCommand } from './commands/poll.js';
@@ -15,9 +15,9 @@ const client = new Client({
   ],
 });
 
-client.once('clientReady', () => {
-  console.log(`✅ Logged in as ${client.user?.tag}`);
-  console.log(`📊 Serving ${client.guilds.cache.size} server(s)`);
+client.once(Events.ClientReady, (c) => {
+  console.log(`✅ Logged in as ${c.user.tag}`);
+  console.log(`📊 Serving ${c.guilds.cache.size} server(s)`);
 });
 
 client.on('interactionCreate', async (interaction: Interaction) => {
