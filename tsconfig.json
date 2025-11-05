@@ -3,6 +3,8 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "moduleResolution": "NodeNext",
     "moduleDetection": "force",
     "strict": true,
