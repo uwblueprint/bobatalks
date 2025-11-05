@@ -1,0 +1,50 @@
+name: Deploy BobaTalks Flowers Bot on pm2 (EC2 Instance)
+
+on:
+  push: # runs tests on every push
+    branches: [main]
+  schedule: # deploys at 09:00 UTC daily (4am Toronto, UTC-5)
+    - cron: '0 9 * * *'
+  workflow_dispatch: # allow manual deploys too
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+      - run: npm run build
+      - run: npm test --if-present
+      - run: tar czf artifact.tgz dist package.json package-lock.json pm2.config.cjs
+      - uses: actions/upload-artifact@v4
+        with: { name: build-artifact, path: artifact.tgz }
+
+  deploy:
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: build-artifact, path: . }
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: artifact.tgz
+          target: /home/ubuntu/bobatalks/
+      - uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/bobatalks
+            tar xzf artifact.tgz
+            npm ci --omit=dev
+            pm2 start pm2.config.cjs --only bobatalks || true
+            pm2 reload bobatalks
+            pm2 save
