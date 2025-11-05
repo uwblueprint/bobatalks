@@ -17,7 +17,11 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint . --ext .js,.ts,.tsx",
     "format": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build": "tsc && tsc --project tsconfig.build.json",
+    "dev": "tsx watch src/bot/index.ts",
+    "start": "node dist/bot/index.js",
+    "register": "node dist/bot/registerCommands.js"
   },
   "keywords": [],
   "author": "",
@@ -38,6 +42,11 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.2.4",
     "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
     "typescript-eslint": "^8.46.1"
+  },
+  "dependencies": {
+    "discord.js": "^14.24.1",
+    "dotenv": "^17.2.3"
   }
 }

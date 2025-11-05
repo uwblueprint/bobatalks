@@ -155,6 +155,16 @@ npx tsc --noEmit
 | `npm run format -- --check .` | Check Prettier formatting (read-only) |
 | `npx tsc --noEmit`            | Type-check only                       |
 | `npx husky install`           | Reinstall Git hooks                   |
+| `npm run dev`                 | Run Discord bot in dev mode           |
+| `npm run build`               | Build TypeScript to JavaScript        |
+| `npm run register`            | Register Discord slash commands       |
+| `npm start`                   | Run built Discord bot                 |
+
+---
+
+## 🤖 Discord Bot
+
+The Discord bot code is located in `src/bot/`. See [src/bot/README.md](src/bot/README.md) for detailed bot documentation.
 
 ---
 
