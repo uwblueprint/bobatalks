@@ -148,6 +148,7 @@ ssh -i your-key.pem ubuntu@your-ec2-ip
 cd ~/bobatalks
 npm ci --omit=dev
 node dist/bot/registerCommands.js  # Register Discord commands
+
 pm2 start pm2.config.cjs
 pm2 save
 pm2 status
@@ -160,6 +161,7 @@ pm2 status
 ```bash
 pm2 status
 # Should show: bobatalks | online
+
 ```
 
 ### View Logs
@@ -167,12 +169,14 @@ pm2 status
 ```bash
 pm2 logs bobatalks
 # Should show bot connecting to Discord
+
 ```
 
 ### Check if bot is online in Discord
 
 - Open Discord
 - Check if your bot appears online
+
 - Try a slash command like `/ping`
 
 ## Troubleshooting
