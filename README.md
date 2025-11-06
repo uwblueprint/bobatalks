@@ -168,6 +168,66 @@ The Discord bot code is located in `src/bot/`. See [src/bot/README.md](src/bot/R
 
 ---
 
+## 🚀 Deployment to EC2
+
+The bot auto-deploys daily at **4 AM Toronto time** (9 AM UTC) via GitHub Actions.
+
+### Prerequisites
+
+**1. Add GitHub Secrets** (`Settings → Secrets and variables → Actions`):
+
+- `EC2_HOST` → Your EC2 IP address
+- `EC2_SSH_KEY` → Your entire `.pem` file contents
+
+**2. Setup EC2** (one-time):
+
+```bash
+ssh -i your-key.pem ubuntu@your-ec2-ip
+
+# Install Node.js 20 & PM2
+sudo apt-get update
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+sudo npm install -g pm2
+
+# Setup project
+mkdir -p ~/bobatalks/logs
+cd ~/bobatalks
+
+# Create .env file
+nano .env
+# Add: DISCORD_TOKEN=... and DISCORD_CLIENT_ID=...
+
+# Enable PM2 on boot
+pm2 startup systemd -u ubuntu --hp /home/ubuntu
+# Run the sudo command that PM2 prints
+```
+
+**3. Deploy**:
+
+- **Auto**: Pushes to `main` deploy at 4 AM daily
+- **Manual**: GitHub → Actions → "Deploy BobaTalks" → Run workflow
+
+**4. Register commands** (after first deploy):
+
+```bash
+ssh -i your-key.pem ubuntu@your-ec2-ip
+cd ~/bobatalks
+node dist/bot/registerCommands.js
+pm2 logs bobatalks
+```
+
+### Useful PM2 Commands
+
+```bash
+pm2 status              # Check status
+pm2 logs bobatalks      # View logs
+pm2 restart bobatalks   # Restart
+pm2 reload bobatalks    # Zero-downtime reload
+```
+
+---
+
 > 💡 _Run this one-liner to confirm everything works:_
 >
 > ```bash

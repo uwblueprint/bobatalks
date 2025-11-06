@@ -1,0 +1,81 @@
+name: Deploy BobaTalks Flowers Bot on pm2 (EC2 Instance)
+
+on:
+  push: # runs tests on every push (no deploy)
+    branches: [main]
+  schedule: # checks at 09:00 UTC daily - only deploys if new commits
+    - cron: '0 9 * * *'
+  workflow_dispatch: # manual deploys always run
+
+jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch full history to check commits
+      - id: check
+        name: Check for new commits
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "Manual trigger - will deploy"
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "push" ]; then
+            echo "Push event - will test only"
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+          else
+            # For scheduled runs, check if there are commits in the last 24 hours
+            COMMITS=$(git log --since="24 hours ago" --oneline | wc -l)
+            if [ "$COMMITS" -gt 0 ]; then
+              echo "Found $COMMITS new commit(s) in the last 24 hours - will deploy"
+              echo "should_deploy=true" >> $GITHUB_OUTPUT
+            else
+              echo "No new commits in the last 24 hours - skipping deployment"
+              echo "should_deploy=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  test:
+    needs: check-changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+      - run: npm run build
+      - run: npm test --if-present
+      - run: tar czf artifact.tgz dist package.json package-lock.json pm2.config.cjs
+      - uses: actions/upload-artifact@v4
+        if: needs.check-changes.outputs.should_deploy == 'true'
+        with: { name: build-artifact, path: artifact.tgz }
+
+  deploy:
+    if: needs.check-changes.outputs.should_deploy == 'true'
+    needs: [check-changes, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: build-artifact, path: . }
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: artifact.tgz
+          target: /home/ubuntu/bobatalks/
+      - uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/bobatalks
+            tar xzf artifact.tgz
+            npm ci --omit=dev
+            pm2 start pm2.config.cjs --only bobatalks || true
+            pm2 reload bobatalks
+            pm2 save
