@@ -21,6 +21,12 @@ export const flower = new SlashCommandBuilder()
       .setName('image')
       .setDescription('Upload an image (PNG, JPEG, etc.) - optional')
       .setRequired(false),
+  )
+  .addBooleanOption((option) =>
+    option
+      .setName('consent')
+      .setDescription('Consent to be featured on the BobaTalks website')
+      .setRequired(false),
   );
 
 // Content filter using obscenity library
@@ -33,15 +39,19 @@ function containsInappropriateContent(text: string): boolean {
   return matcher.hasMatch(text);
 }
 
-// Temporary storage for image attachments (userId -> attachment data)
-const pendingAttachments = new Map<
+// Temporary storage for image attachments and consent (userId -> data)
+const pendingSubmissions = new Map<
   string,
-  { url: string; contentType: string; filename: string }
+  {
+    attachment?: { url: string; contentType: string; filename: string };
+    hasConsent: boolean;
+  }
 >();
 
 export async function flowerCommand(interaction: ChatInputCommandInteraction) {
-  // Get the attachment if provided
+  // Get the attachment and consent if provided
   const attachment = interaction.options.getAttachment('image');
+  const hasConsent = interaction.options.getBoolean('consent') ?? false;
 
   // Validate attachment is an image if provided
   if (attachment) {
@@ -54,15 +64,20 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
       return;
     }
 
-    // Store attachment data for later use in modal submit
-    pendingAttachments.set(interaction.user.id, {
-      url: attachment.url,
-      contentType: attachment.contentType || 'image/png',
-      filename: attachment.name,
+    // Store attachment data and consent for later use in modal submit
+    pendingSubmissions.set(interaction.user.id, {
+      attachment: {
+        url: attachment.url,
+        contentType: attachment.contentType || 'image/png',
+        filename: attachment.name,
+      },
+      hasConsent,
     });
   } else {
-    // Clear any existing attachment data
-    pendingAttachments.delete(interaction.user.id);
+    // Store just consent if no attachment
+    pendingSubmissions.set(interaction.user.id, {
+      hasConsent,
+    });
   }
 
   // Create modal form
@@ -89,25 +104,13 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
     .setRequired(false)
     .setMaxLength(100);
 
-  // Consent input (optional but recommended)
-  const consentInput = new TextInputBuilder()
-    .setCustomId('flowerConsent')
-    .setLabel('Feature on website? (Type "yes" or leave blank)')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Type "yes" to consent to being featured on the BobaTalks website')
-    .setRequired(false)
-    .setMaxLength(3);
-
   // Add inputs to modal
   const messageRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
     messageInput,
   );
   const nameRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(nameInput);
-  const consentRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
-    consentInput,
-  );
 
-  modal.addComponents(messageRow, nameRow, consentRow);
+  modal.addComponents(messageRow, nameRow);
 
   // Show the modal
   await interaction.showModal(modal);
@@ -120,16 +123,15 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
   // Get form inputs
   const message = interaction.fields.getTextInputValue('flowerMessage');
   const name = interaction.fields.getTextInputValue('flowerName') || 'Anonymous';
-  const consentInput = interaction.fields.getTextInputValue('flowerConsent') || '';
-  const hasConsent = consentInput.trim().toLowerCase() === 'yes';
 
-  // Get attachment data if it exists
-  const attachmentData = pendingAttachments.get(interaction.user.id);
+  // Get stored submission data (attachment and consent)
+  const submissionData = pendingSubmissions.get(interaction.user.id);
+  const attachmentData = submissionData?.attachment;
 
   // Validate content
   if (containsInappropriateContent(message) || containsInappropriateContent(name)) {
-    // Clean up attachment data
-    pendingAttachments.delete(interaction.user.id);
+    // Clean up submission data
+    pendingSubmissions.delete(interaction.user.id);
     await interaction.reply({
       content:
         '❌ Your submission contains inappropriate language. Please keep your message positive and respectful.',
@@ -143,19 +145,8 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
     .setColor('#FF69B4') // Pink color for flowers
     .setTitle('🌸 New Flower Submission 💐')
     .setDescription(message)
-    .addFields(
-      { name: 'Submitted by', value: name, inline: true },
-      {
-        name: 'Website Feature',
-        value: hasConsent ? '✅ Consented' : '❌ Not consented',
-        inline: true,
-      },
-    )
-    .setFooter({
-      text: hasConsent
-        ? 'Thank you for celebrating with us and consenting to be featured on the website! 🌸'
-        : 'Thank you for celebrating with us! 🌸',
-    })
+    .addFields({ name: 'Submitted by', value: name, inline: true })
+    .setFooter({ text: 'Thank you for celebrating with us! 🌸' })
     .setTimestamp();
 
   // Add image if provided
@@ -182,12 +173,12 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
       await interaction.channel.send({ embeds: [embed] });
     }
 
-    // Clean up attachment data after successful submission
-    pendingAttachments.delete(interaction.user.id);
+    // Clean up submission data after successful submission
+    pendingSubmissions.delete(interaction.user.id);
   } catch (error) {
     console.error('Error submitting flower:', error);
-    // Clean up attachment data even on error
-    pendingAttachments.delete(interaction.user.id);
+    // Clean up submission data even on error
+    pendingSubmissions.delete(interaction.user.id);
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: '❌ An error occurred while submitting your flower. Please try again.',
