@@ -61,15 +61,34 @@ npm start
 
 The bot currently supports the following slash commands:
 
-| Command       | Description                                                    |
-| ------------- | -------------------------------------------------------------- |
-| `/ping`       | Health check - replies with "🏓 Pong!"                         |
-| `/serverinfo` | Displays server statistics (name, member count, creation date) |
-| `/userinfo`   | Shows information about a user (or yourself)                   |
-| `/poll`       | Creates an interactive poll with up to 5 options               |
-| `/welcome`    | Sends a welcome message to a user                              |
+| Command       | Description                                                                          |
+| ------------- | ------------------------------------------------------------------------------------ |
+| `/ping`       | Health check - replies with "🏓 Pong!"                                               |
+| `/serverinfo` | Displays server statistics (name, member count, creation date)                       |
+| `/userinfo`   | Shows information about a user (or yourself)                                         |
+| `/poll`       | Creates an interactive poll with up to 5 options                                     |
+| `/welcome`    | Sends a welcome message to a user                                                    |
+| `/flower`     | Submit a flower 💐 - a message of acknowledgement, congratulations, or encouragement |
 
 The bot listens for slash command interactions and responds accordingly. It includes error handling and uses embeds for formatted responses.
+
+### 🌸 Flower Command Details
+
+The `/flower` command opens an interactive modal form where users can submit messages of celebration, acknowledgement, or encouragement. This replicates the BobaTalks Google Form experience.
+
+**Features:**
+
+- **Message Field** (Required): Your celebration or acknowledgement message (10-1000 characters)
+- **Name Field** (Optional): Your name or leave blank to remain anonymous
+- **Image URL** (Optional): Link to your photo or any image (dog, graphic, etc.)
+- **Content Validation**: Simple profanity filter to keep messages positive and respectful
+- **Public Posting**: Submissions are posted to the channel with a beautiful embed
+- **Agreement**: By submitting, users agree to be featured on the BobaTalks website
+
+**Example Uses:**
+
+- "I finally landed my first internship!"
+- "Shoutout to Eileen for being so supportive at my event last weekend!"
 
 ---
 
