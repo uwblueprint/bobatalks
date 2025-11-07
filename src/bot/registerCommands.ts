@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 import { REST, Routes } from 'discord.js';
 
+import { flower } from './commands/flower.js';
 import { ping } from './commands/ping.js';
 import { poll } from './commands/poll.js';
 import { serverinfo } from './commands/serverinfo.js';
@@ -14,6 +15,7 @@ const commands = [
   userinfo.toJSON(),
   poll.toJSON(),
   welcome.toJSON(),
+  flower.toJSON(),
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN!);
