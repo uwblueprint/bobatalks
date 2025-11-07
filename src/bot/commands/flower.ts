@@ -21,12 +21,6 @@ export const flower = new SlashCommandBuilder()
       .setName('image')
       .setDescription('Upload an image (PNG, JPEG, etc.) - optional')
       .setRequired(false),
-  )
-  .addBooleanOption((option) =>
-    option
-      .setName('consent')
-      .setDescription('Consent to be featured on the BobaTalks website')
-      .setRequired(false),
   );
 
 // Content filter using obscenity library
@@ -49,9 +43,8 @@ const pendingSubmissions = new Map<
 >();
 
 export async function flowerCommand(interaction: ChatInputCommandInteraction) {
-  // Get the attachment and consent if provided
+  // Get the attachment if provided
   const attachment = interaction.options.getAttachment('image');
-  const hasConsent = interaction.options.getBoolean('consent') ?? false;
 
   // Validate attachment is an image if provided
   if (attachment) {
@@ -64,19 +57,19 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
       return;
     }
 
-    // Store attachment data and consent for later use in modal submit
+    // Store attachment data for later use in modal submit
     pendingSubmissions.set(interaction.user.id, {
       attachment: {
         url: attachment.url,
         contentType: attachment.contentType || 'image/png',
         filename: attachment.name,
       },
-      hasConsent,
+      hasConsent: false, // Will be set from modal
     });
   } else {
-    // Store just consent if no attachment
+    // Initialize with no attachment
     pendingSubmissions.set(interaction.user.id, {
-      hasConsent,
+      hasConsent: false, // Will be set from modal
     });
   }
 
@@ -104,13 +97,25 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
     .setRequired(false)
     .setMaxLength(100);
 
+  // Consent input (optional)
+  const consentInput = new TextInputBuilder()
+    .setCustomId('flowerConsent')
+    .setLabel('Consent to feature on BobaTalks website?')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('Type "yes" or "agree" to consent (optional)')
+    .setRequired(false)
+    .setMaxLength(10);
+
   // Add inputs to modal
   const messageRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
     messageInput,
   );
   const nameRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(nameInput);
+  const consentRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+    consentInput,
+  );
 
-  modal.addComponents(messageRow, nameRow);
+  modal.addComponents(messageRow, nameRow, consentRow);
 
   // Show the modal
   await interaction.showModal(modal);
@@ -123,10 +128,22 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
   // Get form inputs
   const message = interaction.fields.getTextInputValue('flowerMessage');
   const name = interaction.fields.getTextInputValue('flowerName') || 'Anonymous';
+  const consentResponse = interaction.fields
+    .getTextInputValue('flowerConsent')
+    .trim()
+    .toLowerCase();
 
-  // Get stored submission data (attachment and consent)
+  // Parse consent - accept "yes", "agree", "y", "true" as consent
+  const hasConsent = ['yes', 'agree', 'y', 'true'].includes(consentResponse);
+
+  // Get stored submission data (attachment)
   const submissionData = pendingSubmissions.get(interaction.user.id);
   const attachmentData = submissionData?.attachment;
+
+  // Update consent in submission data
+  if (submissionData) {
+    submissionData.hasConsent = hasConsent;
+  }
 
   // Validate content
   if (containsInappropriateContent(message) || containsInappropriateContent(name)) {
@@ -162,9 +179,17 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
 
   // Send to channel
   try {
+    // Create personalized response based on consent
+    let responseMessage =
+      '✅ Your flower has been submitted! Thank you for sharing and celebrating with the community! 🌸';
+
+    if (hasConsent) {
+      responseMessage +=
+        '\n\n💖 Thank you for consenting to feature your submission on the BobaTalks website!';
+    }
+
     await interaction.reply({
-      content:
-        '✅ Your flower has been submitted! Thank you for sharing and celebrating with the community! 🌸',
+      content: responseMessage,
       ephemeral: true,
     });
 
