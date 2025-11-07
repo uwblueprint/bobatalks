@@ -15,6 +15,12 @@ export const flower = new SlashCommandBuilder()
   .setName('flower')
   .setDescription(
     'Submit a flower 💐 - a message of acknowledgement, congratulations, or encouragement',
+  )
+  .addAttachmentOption((option) =>
+    option
+      .setName('image')
+      .setDescription('Upload an image (PNG, JPEG, etc.) - optional')
+      .setRequired(false),
   );
 
 // Content filter using obscenity library
@@ -27,7 +33,38 @@ function containsInappropriateContent(text: string): boolean {
   return matcher.hasMatch(text);
 }
 
+// Temporary storage for image attachments (userId -> attachment data)
+const pendingAttachments = new Map<
+  string,
+  { url: string; contentType: string; filename: string }
+>();
+
 export async function flowerCommand(interaction: ChatInputCommandInteraction) {
+  // Get the attachment if provided
+  const attachment = interaction.options.getAttachment('image');
+
+  // Validate attachment is an image if provided
+  if (attachment) {
+    const contentType = attachment.contentType || '';
+    if (!contentType.startsWith('image/')) {
+      await interaction.reply({
+        content: '❌ Please upload an image file (PNG, JPEG, etc.).',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // Store attachment data for later use in modal submit
+    pendingAttachments.set(interaction.user.id, {
+      url: attachment.url,
+      contentType: attachment.contentType || 'image/png',
+      filename: attachment.name,
+    });
+  } else {
+    // Clear any existing attachment data
+    pendingAttachments.delete(interaction.user.id);
+  }
+
   // Create modal form
   const modal = new ModalBuilder().setCustomId('flowerModal').setTitle('Submit Flowers 💐');
 
@@ -52,36 +89,47 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
     .setRequired(false)
     .setMaxLength(100);
 
-  // Image URL input (optional)
-  const imageInput = new TextInputBuilder()
-    .setCustomId('flowerImage')
-    .setLabel('Image URL (Optional)')
+  // Consent input (optional but recommended)
+  const consentInput = new TextInputBuilder()
+    .setCustomId('flowerConsent')
+    .setLabel('Feature on website? (Type "yes" or leave blank)')
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Upload your photo or any image you like (e.g., a dog, graphic, etc.)')
+    .setPlaceholder('Type "yes" to consent to being featured on the BobaTalks website')
     .setRequired(false)
-    .setMaxLength(500);
+    .setMaxLength(3);
 
   // Add inputs to modal
   const messageRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
     messageInput,
   );
   const nameRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(nameInput);
-  const imageRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(imageInput);
+  const consentRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+    consentInput,
+  );
 
-  modal.addComponents(messageRow, nameRow, imageRow);
+  modal.addComponents(messageRow, nameRow, consentRow);
 
   // Show the modal
   await interaction.showModal(modal);
 }
 
 export async function handleFlowerModalSubmit(interaction: ModalSubmitInteraction) {
+  // Defensive check: ensure this is the correct modal
+  if (interaction.customId !== 'flowerModal') return;
+
   // Get form inputs
   const message = interaction.fields.getTextInputValue('flowerMessage');
   const name = interaction.fields.getTextInputValue('flowerName') || 'Anonymous';
-  const imageUrl = interaction.fields.getTextInputValue('flowerImage') || null;
+  const consentInput = interaction.fields.getTextInputValue('flowerConsent') || '';
+  const hasConsent = consentInput.trim().toLowerCase() === 'yes';
+
+  // Get attachment data if it exists
+  const attachmentData = pendingAttachments.get(interaction.user.id);
 
   // Validate content
   if (containsInappropriateContent(message) || containsInappropriateContent(name)) {
+    // Clean up attachment data
+    pendingAttachments.delete(interaction.user.id);
     await interaction.reply({
       content:
         '❌ Your submission contains inappropriate language. Please keep your message positive and respectful.',
@@ -90,40 +138,35 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
     return;
   }
 
-  // Validate image URL if provided
-  if (imageUrl) {
-    try {
-      const url = new URL(imageUrl);
-      if (!['http:', 'https:'].includes(url.protocol)) {
-        await interaction.reply({
-          content: '❌ Please provide a valid HTTP or HTTPS image URL.',
-          ephemeral: true,
-        });
-        return;
-      }
-    } catch {
-      await interaction.reply({
-        content: '❌ Please provide a valid image URL.',
-        ephemeral: true,
-      });
-      return;
-    }
-  }
-
   // Create embed for the flower submission
   const embed = new EmbedBuilder()
     .setColor('#FF69B4') // Pink color for flowers
     .setTitle('🌸 New Flower Submission 💐')
     .setDescription(message)
-    .addFields({ name: 'Submitted by', value: name, inline: true })
+    .addFields(
+      { name: 'Submitted by', value: name, inline: true },
+      {
+        name: 'Website Feature',
+        value: hasConsent ? '✅ Consented' : '❌ Not consented',
+        inline: true,
+      },
+    )
     .setFooter({
-      text: 'By submitting, you agree to be featured on the BobaTalks website • Thank you for celebrating with us!',
+      text: hasConsent
+        ? 'Thank you for celebrating with us and consenting to be featured on the website! 🌸'
+        : 'Thank you for celebrating with us! 🌸',
     })
     .setTimestamp();
 
   // Add image if provided
-  if (imageUrl) {
-    embed.setImage(imageUrl);
+  if (attachmentData) {
+    embed.setImage(attachmentData.url);
+    // Add Discord CDN URL as a field for backend to process and upload to Google Drive
+    embed.addFields({
+      name: '🖼️ Image CDN URL (for backend)',
+      value: `\`${attachmentData.url}\`\nType: ${attachmentData.contentType}\nFilename: ${attachmentData.filename}`,
+      inline: false,
+    });
   }
 
   // Send to channel
@@ -138,8 +181,13 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
     if (interaction.channel && 'send' in interaction.channel) {
       await interaction.channel.send({ embeds: [embed] });
     }
+
+    // Clean up attachment data after successful submission
+    pendingAttachments.delete(interaction.user.id);
   } catch (error) {
     console.error('Error submitting flower:', error);
+    // Clean up attachment data even on error
+    pendingAttachments.delete(interaction.user.id);
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: '❌ An error occurred while submitting your flower. Please try again.',
