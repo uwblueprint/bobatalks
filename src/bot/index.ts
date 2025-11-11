@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 import { Client, Events, GatewayIntentBits, Interaction } from 'discord.js';
 
+import { flowerCommand, handleFlowerModalSubmit } from './commands/flower.js';
 import { pingCommand } from './commands/ping.js';
 import { pollCommand } from './commands/poll.js';
 import { serverinfoCommand } from './commands/serverinfo.js';
@@ -21,6 +22,25 @@ client.once(Events.ClientReady, (c) => {
 });
 
 client.on('interactionCreate', async (interaction: Interaction) => {
+  // Handle modal submissions
+  if (interaction.isModalSubmit()) {
+    try {
+      if (interaction.customId === 'flowerModal') {
+        await handleFlowerModalSubmit(interaction);
+      }
+    } catch (error) {
+      console.error('Error handling modal submission:', error);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: 'An error occurred while processing your submission.',
+          ephemeral: true,
+        });
+      }
+    }
+    return;
+  }
+
+  // Handle slash commands
   if (!interaction.isChatInputCommand()) return;
 
   try {
@@ -39,6 +59,9 @@ client.on('interactionCreate', async (interaction: Interaction) => {
         break;
       case 'welcome':
         await welcomeCommand(interaction);
+        break;
+      case 'flower':
+        await flowerCommand(interaction);
         break;
       default:
         await interaction.reply({ content: 'Unknown command!', ephemeral: true });
