@@ -346,7 +346,6 @@ async function _main() {
 
   try {
     // 1. CREATE a new flower
-    console.log('\n=== TEST 1: CREATE FLOWER ===');
     const newFlowerData = {
       name: 'Rose',
       username: 'testuser4',
@@ -356,54 +355,16 @@ async function _main() {
     };
     const createdFlower = await createFlower(newFlowerData);
     createdFlowerId = createdFlower.id;
-    console.log('✅ Flower created successfully');
-    console.log(`   ID: ${createdFlowerId}`);
 
     // 2. UPDATE the flower
-    console.log('\n=== TEST 2: UPDATE FLOWER ===');
     // Update the message
     await updateFlower(createdFlowerId, 'message', 'This is the updated message!');
-    console.log('✅ Flower message updated successfully');
 
     // Set admin (approved) to TRUE
     await updateFlower(createdFlowerId, 'approved', 'true');
-    console.log('✅ Flower approved status set to TRUE');
-
-    // Verify the update
-    const sheets = await getSheetsService();
-    const spreadsheetId = await getSheetId();
-    const rowNumber = await getFlowerRow(createdFlowerId);
-    if (rowNumber) {
-      const verifyResponse = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: `${FLOWER_SHEET_NAME}!A${rowNumber}:G${rowNumber}`,
-      });
-      console.log('Updated flower data:', verifyResponse.data.values?.[0]);
-    }
 
     // 3. DELETE the flower
-    console.log('\n=== TEST 3: DELETE FLOWER ===');
     await deleteFlower(createdFlowerId);
-    console.log('✅ Flower deleted successfully');
-
-    // Verify the deletion
-    const deletedRowNumber = await getFlowerRow(createdFlowerId);
-    if (deletedRowNumber === null) {
-      console.log('✅ Verified: Flower no longer exists in the sheet');
-    } else {
-      const verifyDeleteResponse = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: `${FLOWER_SHEET_NAME}!A${deletedRowNumber}:G${deletedRowNumber}`,
-      });
-      const deletedRow = verifyDeleteResponse.data.values?.[0];
-      if (!deletedRow || !deletedRow[0]) {
-        console.log('✅ Verified: Row is empty after deletion');
-      } else {
-        console.log('⚠️ Warning: Row still contains data:', deletedRow);
-      }
-    }
-
-    console.log('\n=== ALL TESTS COMPLETED SUCCESSFULLY ===');
   } catch (error) {
     console.error('\n❌ TEST FAILED:', error);
 
