@@ -59,33 +59,36 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with: { name: build-artifact, path: . }
-  
+
       - name: Guard
         run: |
           [ -n "${{ secrets.EC2_HOST }}" ] || { echo "::error::EC2_HOST is empty"; exit 1; }
           [ -n "${{ secrets.EC2_SSH_KEY }}" ] || { echo "::error::EC2_SSH_KEY is empty"; exit 1; }
-  
-      - name: Write SSH key
-        run: |
-          printf '%s' "${{ secrets.EC2_SSH_KEY }}" > id_ec2
-          sed -i 's/\r$//' id_ec2
-          chmod 600 id_ec2
-          head -n1 id_ec2 | grep -E 'BEGIN (OPENSSH|RSA) PRIVATE KEY' >/dev/null || { echo "::error::Bad key header"; exit 1; }
-          tail -n1 id_ec2 | grep -E 'END (OPENSSH|RSA) PRIVATE KEY'   >/dev/null || { echo "::error::Bad key footer"; exit 1; }
-  
+
+      - name: Add known_hosts
+        run: ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Ensure target dir
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}   # pass key directly
+          script: mkdir -p ~/bobatalks
+
       - uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
-          key_path: id_ec2
+          key: ${{ secrets.EC2_SSH_KEY }}   
           source: artifact.tgz
           target: /home/ubuntu/bobatalks/
-  
+
       - uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
-          key_path: id_ec2
+          key: ${{ secrets.EC2_SSH_KEY }}   
           script: |
             set -e
             cd ~/bobatalks
