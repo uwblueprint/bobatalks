@@ -48,6 +48,9 @@
   "dependencies": {
     "discord.js": "^14.24.1",
     "dotenv": "^17.2.3",
-    "obscenity": "^0.4.5"
+    "google-auth-library": "^10.5.0",
+    "googleapis": "^165.0.0",
+    "obscenity": "^0.4.5",
+    "zod": "^4.1.12"
   }
 }

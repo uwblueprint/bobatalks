@@ -6,8 +6,7 @@ import { JWT } from 'google-auth-library';
 import { google } from 'googleapis';
 import { z } from 'zod';
 
-// Suppressing dotenv v17+ output messages
-process.env.DOTENV_CONFIG_QUIET = 'true';
+process.env.DOTENV_CONFIG_QUIET = 'true'; // surpressing dotenv output
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 // Zod schema for validation
@@ -222,7 +221,7 @@ export async function updateFlower(id: string, fieldName: keyof Omit<Flower, 'id
     ];
     if (!validFields.includes(fieldName)) {
       throw new Error(
-        `Invalid field name: '${fieldName}'. Valid fields are: ${validFields.join(', ')}`,
+        `Invalid field name: '${String(fieldName)}'. Valid fields are: ${validFields.join(', ')}`,
       );
     }
 
@@ -303,7 +302,9 @@ export async function updateFlower(id: string, fieldName: keyof Omit<Flower, 'id
       },
     });
 
-    console.log(`Updating field '${fieldName}' to '${value}' for flower in row ${rowNumber}`);
+    console.log(
+      `Updating field '${String(fieldName)}' to '${value}' for flower in row ${rowNumber}`,
+    );
     return response.data;
   } catch (error) {
     console.error(`Error updating flower with ID ${id}:`, error);
@@ -422,4 +423,4 @@ async function _main() {
 }
 
 // Uncomment to run tests (make sure sheet has proper structure with ID in column A first)
-// main().catch(console.error);
+_main().catch(console.error);
