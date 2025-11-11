@@ -59,23 +59,42 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with: { name: build-artifact, path: . }
+  
+      - name: Guard
+        run: |
+          [ -n "${{ secrets.EC2_HOST }}" ] || { echo "::error::EC2_HOST is empty"; exit 1; }
+          [ -n "${{ secrets.EC2_SSH_KEY }}" ] || { echo "::error::EC2_SSH_KEY is empty"; exit 1; }
+  
+      - name: Write SSH key
+        run: |
+          printf '%s' "${{ secrets.EC2_SSH_KEY }}" > id_ec2
+          sed -i 's/\r$//' id_ec2
+          chmod 600 id_ec2
+          head -n1 id_ec2 | grep -E 'BEGIN (OPENSSH|RSA) PRIVATE KEY' >/dev/null || { echo "::error::Bad key header"; exit 1; }
+          tail -n1 id_ec2 | grep -E 'END (OPENSSH|RSA) PRIVATE KEY'   >/dev/null || { echo "::error::Bad key footer"; exit 1; }
+  
       - uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key_path: id_ec2
           source: artifact.tgz
           target: /home/ubuntu/bobatalks/
+  
       - uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key_path: id_ec2
           script: |
             set -e
             cd ~/bobatalks
             tar xzf artifact.tgz
-            npm ci --omit=dev
-            pm2 start pm2.config.cjs --only bobatalks || true
-            pm2 reload bobatalks
+            if [ -f package-lock.json ]; then npm ci --omit=dev; else npm i --omit=dev; fi
+            if ! command -v pm2 >/dev/null 2>&1; then npm i -g pm2; fi
+            if pm2 describe bobatalks >/dev/null 2>&1; then
+              pm2 reload bobatalks
+            else
+              pm2 start pm2.config.cjs --only bobatalks
+            fi
             pm2 save
