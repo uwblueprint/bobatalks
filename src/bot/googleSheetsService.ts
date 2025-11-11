@@ -18,12 +18,14 @@ export const FlowerSchema = z.object({
   picture: z.string().url().optional(),
   website: z.boolean(),
   approved: z.boolean().optional().default(false),
+  lastUpdated: z.string().datetime(),
 });
 
 export type Flower = z.infer<typeof FlowerSchema>;
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 const FLOWER_SHEET_NAME = 'Flowers'; // Centralized sheet name (the tab at the bottom)
+const FLOWER_SHEET_ID = 0; // The numeric sheet ID for the Flowers tab
 const HEADER_ROW_COUNT = 1; // Number of rows (inclusive) to reserve for headers/guides
 
 // --- Google Sheets Authentication ---
@@ -61,7 +63,9 @@ async function getSheetId() {
 }
 
 // --- Data Transformation ---
-function flowerToRow(flower: Flower): [string, string, string, string, string, boolean, boolean] {
+function flowerToRow(
+  flower: Flower,
+): [string, string, string, string, string, boolean, boolean, string] {
   return [
     flower.id,
     flower.name || '',
@@ -70,6 +74,7 @@ function flowerToRow(flower: Flower): [string, string, string, string, string, b
     flower.picture || '',
     flower.website,
     flower.approved ?? false,
+    flower.lastUpdated,
   ];
 }
 
@@ -77,10 +82,12 @@ function flowerToRow(flower: Flower): [string, string, string, string, string, b
 
 /**
  * Creates a single flower in the sheet.
- * @param flower A Flower object to create (without ID and approved - they will be generated/defaulted).
+ * @param flower A Flower object to create (without ID, approved, and lastUpdated - they will be generated/defaulted).
  * @returns The created Flower object with its generated ID.
  */
-export async function createFlower(flower: Omit<Flower, 'id' | 'approved'>): Promise<Flower> {
+export async function createFlower(
+  flower: Omit<Flower, 'id' | 'approved' | 'lastUpdated'>,
+): Promise<Flower> {
   try {
     const sheets = await getSheetsService();
     const spreadsheetId = await getSheetId();
@@ -89,6 +96,7 @@ export async function createFlower(flower: Omit<Flower, 'id' | 'approved'>): Pro
     const flowerWithId: Flower = {
       id: randomUUID(),
       approved: false,
+      lastUpdated: new Date().toISOString(),
       ...flower,
     };
 
@@ -191,7 +199,7 @@ export async function updateFlower(id: string, fieldName: keyof Omit<Flower, 'id
     }
 
     // Get current flower data
-    const currentRange = `${FLOWER_SHEET_NAME}!A${rowNumber}:G${rowNumber}`;
+    const currentRange = `${FLOWER_SHEET_NAME}!A${rowNumber}:H${rowNumber}`;
     const currentResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: currentRange,
@@ -211,6 +219,7 @@ export async function updateFlower(id: string, fieldName: keyof Omit<Flower, 'id
       picture: currentRow[4] || undefined,
       website: currentRow[5] === 'TRUE' || currentRow[5] === true,
       approved: currentRow[6] === 'TRUE' || currentRow[6] === true || false,
+      lastUpdated: currentRow[7] || new Date().toISOString(),
     };
 
     // Convert the value string to the appropriate type based on the field
@@ -244,6 +253,7 @@ export async function updateFlower(id: string, fieldName: keyof Omit<Flower, 'id
     const updatedFlower: Flower = {
       ...currentFlower,
       [fieldName]: convertedValue,
+      lastUpdated: new Date().toISOString(),
     };
 
     // Validate and update
@@ -283,13 +293,25 @@ export async function deleteFlower(id: string) {
       throw new Error(`Flower with ID ${id} not found`);
     }
 
-    const range = `${FLOWER_SHEET_NAME}!A${rowNumber}:G${rowNumber}`;
-
-    const response = await sheets.spreadsheets.values.clear({
+    const response = await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
-      range,
+      requestBody: {
+        requests: [
+          {
+            deleteDimension: {
+              range: {
+                sheetId: FLOWER_SHEET_ID,
+                dimension: 'ROWS',
+                startIndex: rowNumber - 1, // 0-indexed
+                endIndex: rowNumber, // exclusive
+              },
+            },
+          },
+        ],
+      },
     });
-    console.log('Successfully cleared row');
+
+    console.log(`Successfully deleted row ${rowNumber}`);
     return response.data;
   } catch (error) {
     console.error(`Error deleting flower with ID ${id}:`, error);
@@ -324,18 +346,6 @@ async function _main() {
     await deleteFlower(createdFlowerId);
   } catch (error) {
     console.error('\n❌ TEST FAILED:', error);
-
-    // Cleanup: Try to delete the flower if it was created
-    if (createdFlowerId) {
-      try {
-        console.log('\nAttempting cleanup...');
-        await deleteFlower(createdFlowerId);
-        console.log('Cleanup successful');
-      } catch (cleanupError) {
-        console.error('Cleanup failed:', cleanupError);
-      }
-    }
-
     throw error;
   }
 }
