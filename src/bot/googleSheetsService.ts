@@ -25,7 +25,6 @@ export type Flower = z.infer<typeof FlowerSchema>;
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 const FLOWER_SHEET_NAME = 'Flowers'; // Centralized sheet name (the tab at the bottom)
 const HEADER_ROW_COUNT = 1; // Number of rows (inclusive) to reserve for headers/guides
-const MAX_ROWS_TO_SEARCH = 100; // Manually editable limit for search range
 
 // --- Google Sheets Authentication ---
 async function getAuthToken() {
@@ -62,7 +61,7 @@ async function getSheetId() {
 }
 
 // --- Data Transformation ---
-function flowerToRow(flower: Flower): any[] {
+function flowerToRow(flower: Flower): [string, string, string, string, string, boolean, boolean] {
   return [
     flower.id,
     flower.name || '',
@@ -70,7 +69,7 @@ function flowerToRow(flower: Flower): any[] {
     flower.message,
     flower.picture || '',
     flower.website,
-    flower.approved,
+    flower.approved ?? false,
   ];
 }
 
@@ -96,23 +95,19 @@ export async function createFlower(flower: Omit<Flower, 'id' | 'approved'>): Pro
     const validatedFlower = FlowerSchema.parse(flowerWithId);
     const values = [flowerToRow(validatedFlower)];
 
-    // Find the first empty row to insert the flower
-    const emptyRow = await findEmptyRow();
-    if (!emptyRow) {
-      throw new Error('Could not find an empty row to insert the flower');
-    }
-
-    const range = `${FLOWER_SHEET_NAME}!A${emptyRow}:G${emptyRow}`;
-    await sheets.spreadsheets.values.update({
+    // Use append API for atomic, thread-safe insertion
+    const response = await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range,
+      range: `${FLOWER_SHEET_NAME}!A1`,
       valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
       requestBody: {
         values,
       },
     });
 
-    console.log(`Creating the flower in row ${emptyRow}`);
+    const updatedRange = response.data.updates?.updatedRange;
+    console.log(`Created flower with ID ${validatedFlower.id} in range ${updatedRange}`);
     return validatedFlower;
   } catch (error) {
     console.error('Error creating flower:', error);
@@ -132,7 +127,7 @@ async function getFlowerRow(id: string): Promise<number | null> {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: FLOWER_SHEET_NAME,
+      range: `${FLOWER_SHEET_NAME}!A:A`,
     });
 
     const rows = response.data.values;
@@ -140,9 +135,8 @@ async function getFlowerRow(id: string): Promise<number | null> {
       return null;
     }
 
-    // Search through rows (skipping header), up to MAX_ROWS_TO_SEARCH
-    const searchLimit = Math.min(HEADER_ROW_COUNT + MAX_ROWS_TO_SEARCH, rows.length);
-    for (let i = HEADER_ROW_COUNT; i < searchLimit; i++) {
+    // Search through all rows (skipping header)
+    for (let i = HEADER_ROW_COUNT; i < rows.length; i++) {
       const row = rows[i];
       // Check if the ID in column A matches
       if (row && row[0] === id) {
@@ -153,43 +147,6 @@ async function getFlowerRow(id: string): Promise<number | null> {
     return null;
   } catch (error) {
     console.error('Error finding flower row by ID:', error);
-    return null;
-  }
-}
-
-/**
- * Finds the first empty row in the sheet (where ID column is empty).
- * @returns The 1-indexed row number of the first empty row, or null if none found.
- */
-async function findEmptyRow(): Promise<number | null> {
-  try {
-    const sheets = await getSheetsService();
-    const spreadsheetId = await getSheetId();
-
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: FLOWER_SHEET_NAME,
-    });
-
-    const rows = response.data.values;
-    if (!rows) {
-      // If no rows exist, the first data row after headers is empty
-      return HEADER_ROW_COUNT + 1;
-    }
-
-    // Search through all rows (skipping header) to find first empty ID
-    for (let i = HEADER_ROW_COUNT; i < rows.length; i++) {
-      const row = rows[i];
-      // Check if the row is empty or ID column (column A) is empty
-      if (!row || !row[0] || row[0] === '') {
-        return i + 1; // Convert to 1-indexed row number
-      }
-    }
-
-    // If all rows are filled, return the next row after the last one
-    return rows.length + 1;
-  } catch (error) {
-    console.error('Error finding empty row:', error);
     return null;
   }
 }
