@@ -92,12 +92,17 @@ jobs:
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}   
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
             cd ~/bobatalks
             tar xzf artifact.tgz
-            if [ -f package-lock.json ]; then npm ci --omit=dev; else npm i --omit=dev; fi
+            # install production deps without running lifecycle scripts (skips husky)
+            if [ -f package-lock.json ]; then
+              npm ci --omit=dev --ignore-scripts
+            else
+              npm i --omit=dev --ignore-scripts
+            fi
             if ! command -v pm2 >/dev/null 2>&1; then npm i -g pm2; fi
             if pm2 describe bobatalks >/dev/null 2>&1; then
               pm2 reload bobatalks
