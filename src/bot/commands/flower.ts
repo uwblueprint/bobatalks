@@ -11,6 +11,8 @@ import {
 } from 'discord.js';
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 
+import { createFlower, deleteFlower } from '../googleSheetsService.js';
+
 export const flower = new SlashCommandBuilder()
   .setName('flower')
   .setDescription(
@@ -157,28 +159,40 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
     return;
   }
 
-  // Create embed for the flower submission
-  const embed = new EmbedBuilder()
-    .setColor('#FF69B4') // Pink color for flowers
-    .setTitle('🌸 New Flower Submission 💐')
-    .setDescription(message)
-    .addFields({ name: 'Submitted by', value: name, inline: true })
-    .setFooter({ text: 'Thank you for celebrating with us! 🌸' })
-    .setTimestamp();
-
-  // Add image if provided
-  if (attachmentData) {
-    embed.setImage(attachmentData.url);
-    // Add Discord CDN URL as a field for backend to process and upload to Google Drive
-    embed.addFields({
-      name: '🖼️ Image CDN URL (for backend)',
-      value: `\`${attachmentData.url}\`\nType: ${attachmentData.contentType}\nFilename: ${attachmentData.filename}`,
-      inline: false,
-    });
-  }
-
   // Send to channel
+  let createdFlowerId: string | undefined;
   try {
+    // Create flower entry in Google Sheets first
+    const createdFlower = await createFlower({
+      name: name === 'Anonymous' ? undefined : name,
+      username: interaction.user.username,
+      message: message,
+      picture: attachmentData ? 'PENDING_UPLOAD' : undefined,
+      website: hasConsent,
+    });
+
+    // Store the ID in case we need to rollback
+    createdFlowerId = createdFlower.id;
+
+    // Create embed for the flower submission
+    const embed = new EmbedBuilder()
+      .setColor('#FF69B4') // Pink color for flowers
+      .setTitle('🌸 New Flower Submission 💐')
+      .setDescription(message)
+      .addFields({ name: 'Submitted by', value: name, inline: true })
+      .setFooter({ text: 'Thank you for celebrating with us! 🌸' })
+      .setTimestamp();
+
+    // Add image if provided
+    if (attachmentData) {
+      embed.setImage(attachmentData.url);
+      // Add Discord CDN URL as a field for backend to process and upload to Google Drive
+      embed.addFields({
+        name: '🖼️ Image CDN URL (for backend)',
+        value: `\`${attachmentData.url}\`\nType: ${attachmentData.contentType}\nFilename: ${attachmentData.filename}`,
+        inline: false,
+      });
+    }
     // Create personalized response based on consent
     let responseMessage =
       '✅ Your flower has been submitted! Thank you for sharing and celebrating with the community! 🌸';
@@ -188,14 +202,28 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
         '\n\n💖 Thank you for consenting to feature your submission on the BobaTalks website!';
     }
 
-    await interaction.reply({
-      content: responseMessage,
-      ephemeral: true,
-    });
+    try {
+      await interaction.reply({
+        content: responseMessage,
+        ephemeral: true,
+      });
 
-    // Post the flower to the channel
-    if (interaction.channel && 'send' in interaction.channel) {
-      await interaction.channel.send({ embeds: [embed] });
+      // Post the flower to the channel
+      if (interaction.channel && 'send' in interaction.channel) {
+        await interaction.channel.send({ embeds: [embed] });
+      }
+    } catch (discordError) {
+      // If Discord message fails, rollback the sheet entry
+      console.error('Error sending Discord message, rolling back sheet entry:', discordError);
+      if (createdFlowerId) {
+        try {
+          await deleteFlower(createdFlowerId);
+          console.log(`Successfully rolled back flower entry with ID ${createdFlowerId}`);
+        } catch (deleteError) {
+          console.error('Error deleting flower during rollback:', deleteError);
+        }
+      }
+      throw discordError; // Re-throw to be caught by outer catch
     }
 
     // Clean up submission data after successful submission

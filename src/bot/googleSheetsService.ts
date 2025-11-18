@@ -319,6 +319,7 @@ export async function deleteFlower(id: string) {
   }
 }
 
+/*
 // --- Sample Test ---
 async function _main() {
   let createdFlowerId: string = '';
@@ -352,3 +353,4 @@ async function _main() {
 
 // Uncomment to run tests (make sure sheet has proper structure with ID in column A first)
 _main().catch(console.error);
+*/
