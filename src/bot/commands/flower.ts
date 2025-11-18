@@ -11,6 +11,8 @@ import {
 } from 'discord.js';
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 
+import { createFlower } from '../googleSheetsService.js';
+
 export const flower = new SlashCommandBuilder()
   .setName('flower')
   .setDescription(
@@ -157,28 +159,36 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
     return;
   }
 
-  // Create embed for the flower submission
-  const embed = new EmbedBuilder()
-    .setColor('#FF69B4') // Pink color for flowers
-    .setTitle('🌸 New Flower Submission 💐')
-    .setDescription(message)
-    .addFields({ name: 'Submitted by', value: name, inline: true })
-    .setFooter({ text: 'Thank you for celebrating with us! 🌸' })
-    .setTimestamp();
-
-  // Add image if provided
-  if (attachmentData) {
-    embed.setImage(attachmentData.url);
-    // Add Discord CDN URL as a field for backend to process and upload to Google Drive
-    embed.addFields({
-      name: '🖼️ Image CDN URL (for backend)',
-      value: `\`${attachmentData.url}\`\nType: ${attachmentData.contentType}\nFilename: ${attachmentData.filename}`,
-      inline: false,
-    });
-  }
-
   // Send to channel
   try {
+    // Create flower entry in Google Sheets first
+    await createFlower({
+      name: name === 'Anonymous' ? undefined : name,
+      username: interaction.user.username,
+      message: message,
+      picture: attachmentData ? 'PENDING_UPLOAD' : undefined,
+      website: hasConsent,
+    });
+
+    // Create embed for the flower submission
+    const embed = new EmbedBuilder()
+      .setColor('#FF69B4') // Pink color for flowers
+      .setTitle('🌸 New Flower Submission 💐')
+      .setDescription(message)
+      .addFields({ name: 'Submitted by', value: name, inline: true })
+      .setFooter({ text: 'Thank you for celebrating with us! 🌸' })
+      .setTimestamp();
+
+    // Add image if provided
+    if (attachmentData) {
+      embed.setImage(attachmentData.url);
+      // Add Discord CDN URL as a field for backend to process and upload to Google Drive
+      embed.addFields({
+        name: '🖼️ Image CDN URL (for backend)',
+        value: `\`${attachmentData.url}\`\nType: ${attachmentData.contentType}\nFilename: ${attachmentData.filename}`,
+        inline: false,
+      });
+    }
     // Create personalized response based on consent
     let responseMessage =
       '✅ Your flower has been submitted! Thank you for sharing and celebrating with the community! 🌸';
