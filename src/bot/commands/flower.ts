@@ -11,7 +11,7 @@ import {
 } from 'discord.js';
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 
-import { createFlower } from '../googleSheetsService.js';
+import { createFlower, deleteFlower } from '../googleSheetsService.js';
 
 export const flower = new SlashCommandBuilder()
   .setName('flower')
@@ -160,15 +160,19 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
   }
 
   // Send to channel
+  let createdFlowerId: string | undefined;
   try {
     // Create flower entry in Google Sheets first
-    await createFlower({
+    const createdFlower = await createFlower({
       name: name === 'Anonymous' ? undefined : name,
       username: interaction.user.username,
       message: message,
       picture: attachmentData ? 'PENDING_UPLOAD' : undefined,
       website: hasConsent,
     });
+
+    // Store the ID in case we need to rollback
+    createdFlowerId = createdFlower.id;
 
     // Create embed for the flower submission
     const embed = new EmbedBuilder()
@@ -198,14 +202,28 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
         '\n\n💖 Thank you for consenting to feature your submission on the BobaTalks website!';
     }
 
-    await interaction.reply({
-      content: responseMessage,
-      ephemeral: true,
-    });
+    try {
+      await interaction.reply({
+        content: responseMessage,
+        ephemeral: true,
+      });
 
-    // Post the flower to the channel
-    if (interaction.channel && 'send' in interaction.channel) {
-      await interaction.channel.send({ embeds: [embed] });
+      // Post the flower to the channel
+      if (interaction.channel && 'send' in interaction.channel) {
+        await interaction.channel.send({ embeds: [embed] });
+      }
+    } catch (discordError) {
+      // If Discord message fails, rollback the sheet entry
+      console.error('Error sending Discord message, rolling back sheet entry:', discordError);
+      if (createdFlowerId) {
+        try {
+          await deleteFlower(createdFlowerId);
+          console.log(`Successfully rolled back flower entry with ID ${createdFlowerId}`);
+        } catch (deleteError) {
+          console.error('Error deleting flower during rollback:', deleteError);
+        }
+      }
+      throw discordError; // Re-throw to be caught by outer catch
     }
 
     // Clean up submission data after successful submission
