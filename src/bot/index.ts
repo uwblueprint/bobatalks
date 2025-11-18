@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 import { Client, Events, GatewayIntentBits, Interaction } from 'discord.js';
 
-import { flowerCommand, handleFlowerModalSubmit } from './commands/flower.js';
+import { handleInteraction as handleFlowerInteraction } from './commands/flower.js';
 import { pingCommand } from './commands/ping.js';
 import { pollCommand } from './commands/poll.js';
 import { serverinfoCommand } from './commands/serverinfo.js';
@@ -12,6 +12,8 @@ import { welcomeCommand } from './commands/welcome.js';
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
     // GatewayIntentBits.GuildMembers, // Uncomment if you enable this privileged intent in Discord Developer Portal
   ],
 });
@@ -22,28 +24,23 @@ client.once(Events.ClientReady, (c) => {
 });
 
 client.on('interactionCreate', async (interaction: Interaction) => {
-  // Handle modal submissions
-  if (interaction.isModalSubmit()) {
-    try {
-      if (interaction.customId === 'flowerModal') {
-        await handleFlowerModalSubmit(interaction);
-      }
-    } catch (error) {
-      console.error('Error handling modal submission:', error);
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: 'An error occurred while processing your submission.',
-          ephemeral: true,
-        });
-      }
-    }
-    return;
-  }
-
-  // Handle slash commands
-  if (!interaction.isChatInputCommand()) return;
-
   try {
+    // Check if this is a flower-related interaction
+    const isFlowerInteraction =
+      (interaction.isChatInputCommand() && interaction.commandName === 'flower') ||
+      (interaction.isButton() && interaction.customId.startsWith('flower:')) ||
+      (interaction.isModalSubmit() &&
+        (interaction.customId === 'flower:modal:msg' ||
+          interaction.customId === 'flower:modal:name'));
+
+    if (isFlowerInteraction) {
+      await handleFlowerInteraction(interaction);
+      return;
+    }
+
+    // Handle other slash commands
+    if (!interaction.isChatInputCommand()) return;
+
     switch (interaction.commandName) {
       case 'ping':
         await pingCommand(interaction);
@@ -60,15 +57,12 @@ client.on('interactionCreate', async (interaction: Interaction) => {
       case 'welcome':
         await welcomeCommand(interaction);
         break;
-      case 'flower':
-        await flowerCommand(interaction);
-        break;
       default:
         await interaction.reply({ content: 'Unknown command!', ephemeral: true });
     }
   } catch (error) {
-    console.error('Error handling command:', error);
-    if (!interaction.replied && !interaction.deferred) {
+    console.error('Error handling interaction:', error);
+    if ('reply' in interaction && !interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: 'An error occurred while executing this command.',
         ephemeral: true,
