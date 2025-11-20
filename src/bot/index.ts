@@ -1,8 +1,12 @@
 import 'dotenv/config';
 
-import { Client, Events, GatewayIntentBits, Interaction } from 'discord.js';
+import { Client, Events, GatewayIntentBits, Interaction, MessageFlags } from 'discord.js';
 
-import { flowerCommand, handleFlowerModalSubmit } from './commands/flower.js';
+import {
+  flowerCommand,
+  handleFlowerModalSubmit,
+  handleFlowerConsentButton,
+} from './commands/flower.js';
 import { pingCommand } from './commands/ping.js';
 import { pollCommand } from './commands/poll.js';
 import { serverinfoCommand } from './commands/serverinfo.js';
@@ -22,6 +26,24 @@ client.once(Events.ClientReady, (c) => {
 });
 
 client.on('interactionCreate', async (interaction: Interaction) => {
+  // Handle button interactions
+  if (interaction.isButton()) {
+    try {
+      if (interaction.customId.startsWith('flowerConsent_')) {
+        await handleFlowerConsentButton(interaction);
+      }
+    } catch (error) {
+      console.error('Error handling button interaction:', error);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: 'An error occurred while processing your interaction.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+    }
+    return;
+  }
+
   // Handle modal submissions
   if (interaction.isModalSubmit()) {
     try {
@@ -33,7 +55,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
       if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({
           content: 'An error occurred while processing your submission.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
     }
@@ -64,14 +86,14 @@ client.on('interactionCreate', async (interaction: Interaction) => {
         await flowerCommand(interaction);
         break;
       default:
-        await interaction.reply({ content: 'Unknown command!', ephemeral: true });
+        await interaction.reply({ content: 'Unknown command!', flags: MessageFlags.Ephemeral });
     }
   } catch (error) {
     console.error('Error handling command:', error);
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: 'An error occurred while executing this command.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   }

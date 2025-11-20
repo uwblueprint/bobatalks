@@ -8,6 +8,11 @@ import {
   ModalSubmitInteraction,
   EmbedBuilder,
   ModalActionRowComponentBuilder,
+  MessageActionRowComponentBuilder,
+  MessageFlags,
+  ButtonBuilder,
+  ButtonStyle,
+  ButtonInteraction,
 } from 'discord.js';
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 
@@ -35,12 +40,15 @@ function containsInappropriateContent(text: string): boolean {
   return matcher.hasMatch(text);
 }
 
-// Temporary storage for image attachments and consent (userId -> data)
+// Temporary storage for image attachments and submission data (userId -> data)
 const pendingSubmissions = new Map<
   string,
   {
     attachment?: { url: string; contentType: string; filename: string };
-    hasConsent: boolean;
+    message: string;
+    name: string;
+    username: string;
+    hasConsent?: boolean;
   }
 >();
 
@@ -54,7 +62,7 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
     if (!contentType.startsWith('image/')) {
       await interaction.reply({
         content: '❌ Please upload an image file (PNG, JPEG, etc.).',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -66,12 +74,16 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
         contentType: attachment.contentType || 'image/png',
         filename: attachment.name,
       },
-      hasConsent: false, // Will be set from modal
+      message: '',
+      name: '',
+      username: interaction.user.username,
     });
   } else {
     // Initialize with no attachment
     pendingSubmissions.set(interaction.user.id, {
-      hasConsent: false, // Will be set from modal
+      message: '',
+      name: '',
+      username: interaction.user.username,
     });
   }
 
@@ -99,25 +111,14 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
     .setRequired(false)
     .setMaxLength(100);
 
-  // Consent input (optional)
-  const consentInput = new TextInputBuilder()
-    .setCustomId('flowerConsent')
-    .setLabel('Consent to feature on BobaTalks website?')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Type "yes" or "agree" to consent (optional)')
-    .setRequired(false)
-    .setMaxLength(10);
-
   // Add inputs to modal
   const messageRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
     messageInput,
   );
   const nameRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(nameInput);
-  const consentRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
-    consentInput,
-  );
 
-  modal.addComponents(messageRow, nameRow, consentRow);
+  // Add components
+  modal.addComponents(messageRow, nameRow);
 
   // Show the modal
   await interaction.showModal(modal);
@@ -129,83 +130,169 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
 
   // Get form inputs
   const message = interaction.fields.getTextInputValue('flowerMessage');
-  const name = interaction.fields.getTextInputValue('flowerName') || 'Anonymous';
-  const consentResponse = interaction.fields
-    .getTextInputValue('flowerConsent')
-    .trim()
-    .toLowerCase();
+  const nameInput = interaction.fields.getTextInputValue('flowerName')?.trim() || '';
 
-  // Parse consent - accept "yes", "agree", "y", "true" as consent
-  const hasConsent = ['yes', 'agree', 'y', 'true'].includes(consentResponse);
-
-  // Get stored submission data (attachment)
-  const submissionData = pendingSubmissions.get(interaction.user.id);
-  const attachmentData = submissionData?.attachment;
-
-  // Update consent in submission data
-  if (submissionData) {
-    submissionData.hasConsent = hasConsent;
-  }
-
-  // Validate content
-  if (containsInappropriateContent(message) || containsInappropriateContent(name)) {
+  // Validate content - check the actual name input, not the fallback
+  if (
+    containsInappropriateContent(message) ||
+    (nameInput && containsInappropriateContent(nameInput))
+  ) {
     // Clean up submission data
     pendingSubmissions.delete(interaction.user.id);
     await interaction.reply({
       content:
         '❌ Your submission contains inappropriate language. Please keep your message positive and respectful.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
-  // Send to channel
+  // Get stored submission data (attachment)
+  const submissionData = pendingSubmissions.get(interaction.user.id);
+
+  if (!submissionData) {
+    await interaction.reply({
+      content: '❌ An error occurred. Please try the command again.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Update submission data with message and name
+  submissionData.message = message;
+  submissionData.name = nameInput;
+
+  // Reply to modal submission
+  await interaction.reply({
+    content: '✅ Thank you for your submission! Please answer the consent question below.',
+    flags: MessageFlags.Ephemeral,
+  });
+
+  // Send private consent message with yes/no buttons
+  await interaction.followUp({
+    content: '💖 Would you like to consent to feature your submission on the BobaTalks website?',
+    flags: MessageFlags.Ephemeral,
+    components: [
+      new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId('flowerConsent_yes')
+          .setLabel('Yes')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId('flowerConsent_no')
+          .setLabel('No')
+          .setStyle(ButtonStyle.Danger),
+      ),
+    ],
+  });
+}
+
+export async function handleFlowerConsentButton(interaction: ButtonInteraction) {
+  const customId = interaction.customId;
+  if (!customId.startsWith('flowerConsent_')) return;
+
+  const hasConsent = customId === 'flowerConsent_yes';
+
+  // Get stored submission data
+  const submissionData = pendingSubmissions.get(interaction.user.id);
+
+  if (!submissionData) {
+    await interaction.reply({
+      content: '❌ Your submission data was not found. Please try the command again.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Update consent
+  submissionData.hasConsent = hasConsent;
+
+  // Process the flower submission
+  await processFlowerSubmission(interaction, submissionData);
+}
+
+function createFlowerEmbed(
+  message: string,
+  displayName: string,
+  attachmentData?: { url: string; contentType: string; filename: string },
+): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setColor('#FF69B4') // Pink color for flowers
+    .setTitle('🌸 New Flower Submission 💐')
+    .setDescription(message)
+    .addFields({ name: 'Submitted by', value: displayName, inline: true })
+    .setFooter({ text: 'Thank you for celebrating with us! 🌸' })
+    .setTimestamp();
+
+  // Add image if provided
+  if (attachmentData) {
+    embed.setImage(attachmentData.url);
+  }
+
+  return embed;
+}
+
+function createResponseMessage(hasConsent: boolean): string {
+  let message =
+    '✅ Your flower has been submitted! Thank you for sharing and celebrating with the community! 🌸';
+
+  if (hasConsent) {
+    message +=
+      '\n\n💖 Thank you for consenting to feature your submission on the BobaTalks website!';
+  }
+
+  return message;
+}
+
+async function rollbackFlowerEntry(createdFlowerId: string): Promise<void> {
+  try {
+    await deleteFlower(createdFlowerId);
+    console.log(`Successfully rolled back flower entry with ID ${createdFlowerId}`);
+  } catch (deleteError) {
+    console.error('Error deleting flower during rollback:', deleteError);
+  }
+}
+
+async function processFlowerSubmission(
+  interaction: ButtonInteraction,
+  submissionData: {
+    attachment?: { url: string; contentType: string; filename: string };
+    message: string;
+    name: string;
+    username: string;
+    hasConsent?: boolean;
+  },
+) {
+  const {
+    attachment: attachmentData,
+    message,
+    name: nameInput,
+    username,
+    hasConsent = false,
+  } = submissionData;
+
   let createdFlowerId: string | undefined;
   try {
     // Create flower entry in Google Sheets first
     const createdFlower = await createFlower({
-      name: name === 'Anonymous' ? undefined : name,
-      username: interaction.user.username,
+      name: nameInput || undefined,
+      username: username,
       message: message,
       picture: attachmentData ? 'PENDING_UPLOAD' : undefined,
       website: hasConsent,
     });
 
-    // Store the ID in case we need to rollback
     createdFlowerId = createdFlower.id;
 
-    // Create embed for the flower submission
-    const embed = new EmbedBuilder()
-      .setColor('#FF69B4') // Pink color for flowers
-      .setTitle('🌸 New Flower Submission 💐')
-      .setDescription(message)
-      .addFields({ name: 'Submitted by', value: name, inline: true })
-      .setFooter({ text: 'Thank you for celebrating with us! 🌸' })
-      .setTimestamp();
-
-    // Add image if provided
-    if (attachmentData) {
-      embed.setImage(attachmentData.url);
-      // Add Discord CDN URL as a field for backend to process and upload to Google Drive
-      embed.addFields({
-        name: '🖼️ Image CDN URL (for backend)',
-        value: `\`${attachmentData.url}\`\nType: ${attachmentData.contentType}\nFilename: ${attachmentData.filename}`,
-        inline: false,
-      });
-    }
-    // Create personalized response based on consent
-    let responseMessage =
-      '✅ Your flower has been submitted! Thank you for sharing and celebrating with the community! 🌸';
-
-    if (hasConsent) {
-      responseMessage +=
-        '\n\n💖 Thank you for consenting to feature your submission on the BobaTalks website!';
-    }
+    // Create embed and response message
+    const displayName = nameInput || username;
+    const embed = createFlowerEmbed(message, displayName, attachmentData);
+    const responseMessage = createResponseMessage(hasConsent);
 
     try {
-      await interaction.reply({
+      await interaction.update({
         content: responseMessage,
-        ephemeral: true,
+        components: [], // Remove buttons
       });
 
       // Post the flower to the channel
@@ -216,26 +303,26 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
       // If Discord message fails, rollback the sheet entry
       console.error('Error sending Discord message, rolling back sheet entry:', discordError);
       if (createdFlowerId) {
-        try {
-          await deleteFlower(createdFlowerId);
-          console.log(`Successfully rolled back flower entry with ID ${createdFlowerId}`);
-        } catch (deleteError) {
-          console.error('Error deleting flower during rollback:', deleteError);
-        }
+        await rollbackFlowerEntry(createdFlowerId);
       }
-      throw discordError; // Re-throw to be caught by outer catch
+      throw discordError;
     }
 
     // Clean up submission data after successful submission
     pendingSubmissions.delete(interaction.user.id);
   } catch (error) {
     console.error('Error submitting flower:', error);
-    // Clean up submission data even on error
     pendingSubmissions.delete(interaction.user.id);
+
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: '❌ An error occurred while submitting your flower. Please try again.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
+      });
+    } else if (interaction.isRepliable()) {
+      await interaction.followUp({
+        content: '❌ An error occurred while submitting your flower. Please try again.',
+        flags: MessageFlags.Ephemeral,
       });
     }
   }
