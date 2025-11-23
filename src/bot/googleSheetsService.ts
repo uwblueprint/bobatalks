@@ -15,7 +15,7 @@ export const FlowerSchema = z.object({
   name: z.string().optional(),
   username: z.string().optional(),
   message: z.string().min(1),
-  picture: z.string().url().optional(),
+  picture: z.union([z.string().url(), z.literal('PENDING_UPLOAD')]).optional(),
   website: z.boolean(),
   approved: z.boolean().optional().default(false),
   lastUpdated: z.string().datetime(),
@@ -234,12 +234,16 @@ export async function updateFlower(id: string, fieldName: keyof Omit<Flower, 'id
       }
       convertedValue = lowerValue === 'true';
     } else if (fieldName === 'picture') {
-      // Validate URL format if provided
+      // Validate URL format if provided, or allow 'PENDING_UPLOAD' as a special value
       if (value && value !== '') {
-        try {
-          new URL(value);
-        } catch {
-          throw new Error(`Invalid value for 'picture': Must be a valid URL, got '${value}'`);
+        if (value !== 'PENDING_UPLOAD') {
+          try {
+            new URL(value);
+          } catch {
+            throw new Error(
+              `Invalid value for 'picture': Must be a valid URL or 'PENDING_UPLOAD', got '${value}'`,
+            );
+          }
         }
       }
     } else if (fieldName === 'message') {

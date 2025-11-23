@@ -71,20 +71,19 @@ jobs:
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-
       - name: Ensure target dir
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}   # pass key directly
+          key: ${{ secrets.EC2_SSH_KEY }} # pass key directly
           script: mkdir -p ~/bobatalks
 
       - uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}   
+          key: ${{ secrets.EC2_SSH_KEY }}
           source: artifact.tgz
           target: /home/ubuntu/bobatalks/
 
