@@ -50,6 +50,7 @@
     "dotenv": "^17.2.3",
     "google-auth-library": "^10.5.0",
     "googleapis": "^165.0.0",
+    "node-fetch": "^3.3.2",
     "obscenity": "^0.4.5",
     "zod": "^4.1.12"
   }
