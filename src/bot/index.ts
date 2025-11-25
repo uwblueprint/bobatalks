@@ -37,11 +37,26 @@ client.on('interactionCreate', async (interaction: Interaction) => {
       }
     } catch (error) {
       console.error('Error handling button interaction:', error);
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: 'An error occurred while processing your interaction.',
-          flags: MessageFlags.Ephemeral,
-        });
+      try {
+        if (interaction.deferred) {
+          await interaction.editReply({
+            content: 'An error occurred while processing your interaction.',
+            components: [],
+          });
+        } else if (!interaction.replied) {
+          await interaction.reply({
+            content: 'An error occurred while processing your interaction.',
+            flags: MessageFlags.Ephemeral,
+          });
+        } else {
+          await interaction.followUp({
+            content: 'An error occurred while processing your interaction.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+      } catch (replyError) {
+        // If we can't reply (e.g., interaction expired), just log it
+        console.error('Error sending error message to user:', replyError);
       }
     }
     return;

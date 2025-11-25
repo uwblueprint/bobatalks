@@ -216,6 +216,9 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
     const nameIsEmpty = !submissionData.name || submissionData.name.trim() === '';
     submissionData.isAnonymous = nameIsEmpty ? true : false;
 
+    // Defer the interaction to prevent token expiration during async operations
+    await interaction.deferUpdate();
+
     // Process the flower submission directly
     await processFlowerSubmission(interaction, submissionData);
     return;
@@ -266,6 +269,9 @@ export async function handleFlowerAnonymousButton(interaction: ButtonInteraction
     });
     return;
   }
+
+  // Defer the interaction to prevent token expiration during async operations
+  await interaction.deferUpdate();
 
   // Update anonymous preference (user can override the default)
   submissionData.isAnonymous = isAnonymous;
@@ -348,7 +354,18 @@ async function processFlowerSubmission(
     // Upload image to Google Drive if attachment exists
     if (attachmentData) {
       try {
-        driveImageUrl = await saveDiscordImageToDrive(attachmentData.url);
+        // Create a timeout promise that rejects after 1 minute
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('Google Drive upload timed out after 1 minute'));
+          }, 60000); // 1 minute = 60000ms
+        });
+
+        // Race between the upload and the timeout
+        driveImageUrl = await Promise.race([
+          saveDiscordImageToDrive(attachmentData.url),
+          timeoutPromise,
+        ]);
         console.log(`Successfully uploaded image to Google Drive: ${driveImageUrl}`);
       } catch (uploadError) {
         console.error('Error uploading image to Google Drive:', uploadError);
@@ -403,10 +420,18 @@ async function processFlowerSubmission(
     const responseMessage = createResponseMessage(hasConsent, imageUploadFailed);
 
     try {
-      await interaction.update({
-        content: responseMessage,
-        components: [], // Remove buttons
-      });
+      // Use editReply if interaction was deferred, otherwise use update
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({
+          content: responseMessage,
+          components: [], // Remove buttons
+        });
+      } else {
+        await interaction.update({
+          content: responseMessage,
+          components: [], // Remove buttons
+        });
+      }
 
       // Post the flower to the channel
       if (interaction.channel && 'send' in interaction.channel) {
@@ -427,16 +452,29 @@ async function processFlowerSubmission(
     console.error('Error submitting flower:', error);
     pendingSubmissions.delete(interaction.user.id);
 
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: '❌ An error occurred while submitting your flower. Please try again.',
-        flags: MessageFlags.Ephemeral,
-      });
-    } else if (interaction.isRepliable()) {
-      await interaction.followUp({
-        content: '❌ An error occurred while submitting your flower. Please try again.',
-        flags: MessageFlags.Ephemeral,
-      });
+    try {
+      if (interaction.deferred || interaction.replied) {
+        // If already deferred/replied, use editReply or followUp
+        if (interaction.deferred) {
+          await interaction.editReply({
+            content: '❌ An error occurred while submitting your flower. Please try again.',
+            components: [],
+          });
+        } else {
+          await interaction.followUp({
+            content: '❌ An error occurred while submitting your flower. Please try again.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+      } else {
+        await interaction.reply({
+          content: '❌ An error occurred while submitting your flower. Please try again.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+    } catch (replyError) {
+      // If we can't reply (e.g., interaction expired), just log it
+      console.error('Error sending error message to user:', replyError);
     }
   }
 }
