@@ -1,3 +1,15 @@
+/*
+
+However, a new refresh token might be generated or an old one invalidated under these specific conditions:
+
+App Status is "Testing": If your Google Cloud Project's OAuth consent screen is set to "Testing" (not "In Production"), the refresh token will expire automatically after 7 days.
+Revocation: The user manually revokes access to the app in their Google Account settings.
+Inactivity: The token has not been used for 6 months.
+Limit Exceeded: There is a limit of 50 refresh tokens per user account per client. If a 51st token is generated, the oldest one is automatically revoked.
+Password Change: In some cases, changing the Google account password may revoke outstanding tokens.
+
+*/
+
 import readline from 'readline';
 
 import { google } from 'googleapis';

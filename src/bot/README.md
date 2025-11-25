@@ -34,13 +34,38 @@ GUILD_ID=your_guild_id_here
 npm ci
 ```
 
-### 3. Register Commands (First Time Only)
+### 3. Google Drive Setup (Optional)
+
+To enable image uploads for the `/flower` command, you need to generate a Google Refresh Token.
+
+1. Ensure `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set in your `.env` file.
+2. Run the auth setup script:
+
+```bash
+npx tsx src/bot/setupGoogleAuth.ts
+```
+
+3. Follow the URL, authorize the app, and paste the code back into the terminal.
+4. Add the generated `GOOGLE_REFRESH_TOKEN` to your `.env` file.
+
+**Token Expiration:**
+Refresh tokens are long-lived but may expire if:
+
+- The Google Cloud app is in "Testing" status (expires in 7 days).
+- You manually revoke access in your Google Account.
+- The token is unused for 6 months.
+- The limit of 50 tokens per user account is exceeded.
+- The password for your Google account is reset
+
+If your token stops working, simply run the script again to generate a new one.
+
+### 4. Register Commands (First Time Only)
 
 ```bash
 npm run register
 ```
 
-### 4. Start the Bot
+### 5. Start the Bot
 
 **Development mode** (auto-reload):
 
