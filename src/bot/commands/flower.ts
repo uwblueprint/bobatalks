@@ -50,7 +50,7 @@ const pendingSubmissions = new Map<
     name: string;
     username: string;
     hasConsent?: boolean;
-    isAnonymous?: boolean;
+    shareDiscordUsername?: boolean;
   }
 >();
 
@@ -109,7 +109,7 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
     .setCustomId('flowerName')
     .setLabel('Your Name (Optional)')
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Leave blank to remain anonymous')
+    .setPlaceholder('e.g. John Doe')
     .setRequired(false)
     .setMaxLength(100);
 
@@ -166,14 +166,74 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
 
   // Reply to modal submission
   await interaction.reply({
-    content: '✅ Thank you for your submission! Please answer the consent question below.',
+    content: '✅ Thank you for your submission! Please answer the question below.',
     flags: MessageFlags.Ephemeral,
   });
 
-  // Send private consent message with yes/no buttons
-  await interaction.followUp({
+  // If name is provided, directly ask about website consent
+  // If name is not provided, first ask about sharing Discord username
+  if (nameInput && nameInput.trim() !== '') {
+    // Name provided: directly ask about website consent
+    await interaction.followUp({
+      content: '💖 Would you like to consent to feature your submission on the BobaTalks website?',
+      flags: MessageFlags.Ephemeral,
+      components: [
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId('flowerConsent_yes')
+            .setLabel('Yes')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId('flowerConsent_no')
+            .setLabel('No')
+            .setStyle(ButtonStyle.Danger),
+        ),
+      ],
+    });
+  } else {
+    // No name provided: first ask about sharing Discord username
+    await interaction.followUp({
+      content: '💖 Would you like to share your Discord username with this submission?',
+      flags: MessageFlags.Ephemeral,
+      components: [
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId('flowerShareUsername_yes')
+            .setLabel('Yes')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId('flowerShareUsername_no')
+            .setLabel('No')
+            .setStyle(ButtonStyle.Danger),
+        ),
+      ],
+    });
+  }
+}
+
+export async function handleFlowerShareUsernameButton(interaction: ButtonInteraction) {
+  const customId = interaction.customId;
+  if (!customId.startsWith('flowerShareUsername_')) return;
+
+  const shareUsername = customId === 'flowerShareUsername_yes';
+
+  // Get stored submission data
+  const submissionData = pendingSubmissions.get(interaction.user.id);
+
+  if (!submissionData) {
+    await interaction.reply({
+      content: '❌ Your submission data was not found. Please try the command again.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Update shareDiscordUsername preference
+  submissionData.shareDiscordUsername = shareUsername;
+
+  // Now ask about website consent
+  await interaction.update({
     content: '💖 Would you like to consent to feature your submission on the BobaTalks website?',
-    flags: MessageFlags.Ephemeral,
     components: [
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
         new ButtonBuilder()
@@ -209,74 +269,10 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
   // Update consent
   submissionData.hasConsent = hasConsent;
 
-  // If user said "No" to website consent, skip anonymous question and process directly
-  // (anonymous doesn't matter if not being featured on website)
-  if (!hasConsent) {
-    // Default to anonymous if name is empty to protect privacy
-    const nameIsEmpty = !submissionData.name || submissionData.name.trim() === '';
-    submissionData.isAnonymous = nameIsEmpty ? true : false;
-
-    // Defer the interaction to prevent token expiration during async operations
-    await interaction.deferUpdate();
-
-    // Process the flower submission directly
-    await processFlowerSubmission(interaction, submissionData);
-    return;
-  }
-
-  // If name field is empty initially, default to anonymous to ensure Discord name isn't shown
-  const nameIsEmpty = !submissionData.name || submissionData.name.trim() === '';
-  if (nameIsEmpty) {
-    submissionData.isAnonymous = true;
-  }
-
-  // Update the button interaction to show anonymous question
-  // Inform user about Discord username usage if name field is empty
-  const anonymousContent = nameIsEmpty
-    ? '✅ Thank you! Would you like your entry to be anonymous?\n\n⚠️ Note: If you choose "No", your Discord username will be used since you didn\'t provide a name.'
-    : '✅ Thank you! Would you like your entry to be anonymous?';
-
-  await interaction.update({
-    content: anonymousContent,
-    components: [
-      new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId('flowerAnonymous_yes')
-          .setLabel('Yes')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId('flowerAnonymous_no')
-          .setLabel('No')
-          .setStyle(ButtonStyle.Danger),
-      ),
-    ],
-  });
-}
-
-export async function handleFlowerAnonymousButton(interaction: ButtonInteraction) {
-  const customId = interaction.customId;
-  if (!customId.startsWith('flowerAnonymous_')) return;
-
-  const isAnonymous = customId === 'flowerAnonymous_yes';
-
-  // Get stored submission data
-  const submissionData = pendingSubmissions.get(interaction.user.id);
-
-  if (!submissionData) {
-    await interaction.reply({
-      content: '❌ Your submission data was not found. Please try the command again.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
   // Defer the interaction to prevent token expiration during async operations
   await interaction.deferUpdate();
 
-  // Update anonymous preference (user can override the default)
-  submissionData.isAnonymous = isAnonymous;
-
-  // Process the flower submission
+  // Process the flower submission directly
   await processFlowerSubmission(interaction, submissionData);
 }
 
@@ -335,7 +331,7 @@ async function processFlowerSubmission(
     name: string;
     username: string;
     hasConsent?: boolean;
-    isAnonymous?: boolean;
+    shareDiscordUsername?: boolean;
   },
 ) {
   const {
@@ -344,7 +340,7 @@ async function processFlowerSubmission(
     name: nameInput,
     username,
     hasConsent = false,
-    isAnonymous = false,
+    shareDiscordUsername = false,
   } = submissionData;
 
   let createdFlowerId: string | undefined;
@@ -385,22 +381,22 @@ async function processFlowerSubmission(
 
     createdFlowerId = createdFlower.id;
 
-    // Determine display name based on anonymous preference and name field
+    // Determine display name based on name field and Discord username sharing preference
     let displayName: string;
     const nameIsEmpty = !nameInput || nameInput.trim() === '';
 
-    if (isAnonymous) {
-      // If yes to anonymous, post as "Anonymous"
-      displayName = 'Anonymous';
-    } else {
-      // If no to anonymous
-      if (nameIsEmpty) {
-        // If name field is empty, post as Discord Username
+    if (nameIsEmpty) {
+      // If name field is empty, check if user wants to share Discord username
+      if (shareDiscordUsername) {
+        // User consented to share Discord username
         displayName = username;
       } else {
-        // If name field is filled, post as Real Name
-        displayName = nameInput.trim();
+        // User chose not to share Discord username
+        displayName = 'Anonymous';
       }
+    } else {
+      // If name field is filled, use the provided name
+      displayName = nameInput.trim();
     }
 
     // Prefer displaying Drive image upload if available; fallback to direct attachment only if no Drive URL
