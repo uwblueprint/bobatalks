@@ -6,6 +6,7 @@ import {
   flowerCommand,
   handleFlowerModalSubmit,
   handleFlowerConsentButton,
+  handleFlowerAnonymousButton,
 } from './commands/flower.js';
 import { pingCommand } from './commands/ping.js';
 import { pollCommand } from './commands/poll.js';
@@ -31,6 +32,8 @@ client.on('interactionCreate', async (interaction: Interaction) => {
     try {
       if (interaction.customId.startsWith('flowerConsent_')) {
         await handleFlowerConsentButton(interaction);
+      } else if (interaction.customId.startsWith('flowerAnonymous_')) {
+        await handleFlowerAnonymousButton(interaction);
       }
     } catch (error) {
       console.error('Error handling button interaction:', error);
