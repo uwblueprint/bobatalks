@@ -16,6 +16,7 @@ import {
 } from 'discord.js';
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 
+import { saveDiscordImageToDrive } from '../googleDriveImages.js';
 import { createFlower, deleteFlower } from '../googleSheetsService.js';
 
 export const flower = new SlashCommandBuilder()
@@ -232,9 +233,14 @@ function createFlowerEmbed(
   return embed;
 }
 
-function createResponseMessage(hasConsent: boolean): string {
+function createResponseMessage(hasConsent: boolean, imageUploadFailed?: boolean): string {
   let message =
     '✅ Your flower has been submitted! Thank you for sharing and celebrating with the community! 🌸';
+
+  if (imageUploadFailed) {
+    message +=
+      '\n\n⚠️ Note: There was an issue uploading your image, but your message was still submitted successfully.';
+  }
 
   if (hasConsent) {
     message +=
@@ -272,22 +278,44 @@ async function processFlowerSubmission(
   } = submissionData;
 
   let createdFlowerId: string | undefined;
+  let driveImageUrl: string | undefined;
+
   try {
-    // Create flower entry in Google Sheets first
+    // Upload image to Google Drive if attachment exists
+    if (attachmentData) {
+      try {
+        driveImageUrl = await saveDiscordImageToDrive(attachmentData.url);
+        console.log(`Successfully uploaded image to Google Drive: ${driveImageUrl}`);
+      } catch (uploadError) {
+        console.error('Error uploading image to Google Drive:', uploadError);
+        // Continue without image rather than failing the entire submission
+        driveImageUrl = undefined;
+      }
+    }
+
+    // Create flower entry in Google Sheets with drive link
     const createdFlower = await createFlower({
       name: nameInput || undefined,
       username: username,
       message: message,
-      picture: attachmentData ? 'PENDING_UPLOAD' : undefined,
+      picture: driveImageUrl,
       website: hasConsent,
     });
 
     createdFlowerId = createdFlower.id;
 
-    // Create embed and response message
+    // Create embed and response message using drive image URL
     const displayName = nameInput || username;
-    const embed = createFlowerEmbed(message, displayName, attachmentData);
-    const responseMessage = createResponseMessage(hasConsent);
+    const embedAttachmentData = driveImageUrl
+      ? {
+          url: driveImageUrl,
+          contentType: attachmentData?.contentType || 'image/png',
+          filename: attachmentData?.filename || 'image',
+        }
+      : undefined;
+    const embed = createFlowerEmbed(message, displayName, embedAttachmentData);
+    const imageUploadFailed = attachmentData && !driveImageUrl;
+    const responseMessage = createResponseMessage(hasConsent, imageUploadFailed);
 
     try {
       await interaction.update({
