@@ -49,6 +49,7 @@ const pendingSubmissions = new Map<
     name: string;
     username: string;
     hasConsent?: boolean;
+    isAnonymous?: boolean;
   }
 >();
 
@@ -207,6 +208,67 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
   // Update consent
   submissionData.hasConsent = hasConsent;
 
+  // If user said "No" to website consent, skip anonymous question and process directly
+  // (anonymous doesn't matter if not being featured on website)
+  if (!hasConsent) {
+    // Default to anonymous if name is empty to protect privacy
+    const nameIsEmpty = !submissionData.name || submissionData.name.trim() === '';
+    submissionData.isAnonymous = nameIsEmpty ? true : false;
+
+    // Process the flower submission directly
+    await processFlowerSubmission(interaction, submissionData);
+    return;
+  }
+
+  // If name field is empty initially, default to anonymous to ensure Discord name isn't shown
+  const nameIsEmpty = !submissionData.name || submissionData.name.trim() === '';
+  if (nameIsEmpty) {
+    submissionData.isAnonymous = true;
+  }
+
+  // Update the button interaction to show anonymous question
+  // Inform user about Discord username usage if name field is empty
+  const anonymousContent = nameIsEmpty
+    ? '✅ Thank you! Would you like your entry to be anonymous?\n\n⚠️ Note: If you choose "No", your Discord username will be used since you didn\'t provide a name.'
+    : '✅ Thank you! Would you like your entry to be anonymous?';
+
+  await interaction.update({
+    content: anonymousContent,
+    components: [
+      new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId('flowerAnonymous_yes')
+          .setLabel('Yes')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId('flowerAnonymous_no')
+          .setLabel('No')
+          .setStyle(ButtonStyle.Danger),
+      ),
+    ],
+  });
+}
+
+export async function handleFlowerAnonymousButton(interaction: ButtonInteraction) {
+  const customId = interaction.customId;
+  if (!customId.startsWith('flowerAnonymous_')) return;
+
+  const isAnonymous = customId === 'flowerAnonymous_yes';
+
+  // Get stored submission data
+  const submissionData = pendingSubmissions.get(interaction.user.id);
+
+  if (!submissionData) {
+    await interaction.reply({
+      content: '❌ Your submission data was not found. Please try the command again.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Update anonymous preference (user can override the default)
+  submissionData.isAnonymous = isAnonymous;
+
   // Process the flower submission
   await processFlowerSubmission(interaction, submissionData);
 }
@@ -261,6 +323,7 @@ async function processFlowerSubmission(
     name: string;
     username: string;
     hasConsent?: boolean;
+    isAnonymous?: boolean;
   },
 ) {
   const {
@@ -269,6 +332,7 @@ async function processFlowerSubmission(
     name: nameInput,
     username,
     hasConsent = false,
+    isAnonymous = false,
   } = submissionData;
 
   let createdFlowerId: string | undefined;
@@ -284,8 +348,24 @@ async function processFlowerSubmission(
 
     createdFlowerId = createdFlower.id;
 
-    // Create embed and response message
-    const displayName = nameInput || username;
+    // Determine display name based on anonymous preference and name field
+    let displayName: string;
+    const nameIsEmpty = !nameInput || nameInput.trim() === '';
+
+    if (isAnonymous) {
+      // If yes to anonymous, post as "Anonymous"
+      displayName = 'Anonymous';
+    } else {
+      // If no to anonymous
+      if (nameIsEmpty) {
+        // If name field is empty, post as Discord Username
+        displayName = username;
+      } else {
+        // If name field is filled, post as Real Name
+        displayName = nameInput.trim();
+      }
+    }
+
     const embed = createFlowerEmbed(message, displayName, attachmentData);
     const responseMessage = createResponseMessage(hasConsent);
 
