@@ -50,6 +50,7 @@ const pendingSubmissions = new Map<
     name: string;
     username: string;
     hasConsent?: boolean;
+    shareDiscordUsername?: boolean;
   }
 >();
 
@@ -108,7 +109,7 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
     .setCustomId('flowerName')
     .setLabel('Your Name (Optional)')
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Leave blank to remain anonymous')
+    .setPlaceholder('e.g. John Doe')
     .setRequired(false)
     .setMaxLength(100);
 
@@ -165,14 +166,74 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
 
   // Reply to modal submission
   await interaction.reply({
-    content: '✅ Thank you for your submission! Please answer the consent question below.',
+    content: '✅ Thank you for your submission! Please answer the question below.',
     flags: MessageFlags.Ephemeral,
   });
 
-  // Send private consent message with yes/no buttons
-  await interaction.followUp({
+  // If name is provided, directly ask about website consent
+  // If name is not provided, first ask about sharing Discord username
+  if (nameInput && nameInput.trim() !== '') {
+    // Name provided: directly ask about website consent
+    await interaction.followUp({
+      content: '💖 Would you like to consent to feature your submission on the BobaTalks website?',
+      flags: MessageFlags.Ephemeral,
+      components: [
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId('flowerConsent_yes')
+            .setLabel('Yes')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId('flowerConsent_no')
+            .setLabel('No')
+            .setStyle(ButtonStyle.Danger),
+        ),
+      ],
+    });
+  } else {
+    // No name provided: first ask about sharing Discord username
+    await interaction.followUp({
+      content: '💖 Would you like to share your Discord username with this submission?',
+      flags: MessageFlags.Ephemeral,
+      components: [
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId('flowerShareUsername_yes')
+            .setLabel('Yes')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId('flowerShareUsername_no')
+            .setLabel('No')
+            .setStyle(ButtonStyle.Danger),
+        ),
+      ],
+    });
+  }
+}
+
+export async function handleFlowerShareUsernameButton(interaction: ButtonInteraction) {
+  const customId = interaction.customId;
+  if (!customId.startsWith('flowerShareUsername_')) return;
+
+  const shareUsername = customId === 'flowerShareUsername_yes';
+
+  // Get stored submission data
+  const submissionData = pendingSubmissions.get(interaction.user.id);
+
+  if (!submissionData) {
+    await interaction.reply({
+      content: '❌ Your submission data was not found. Please try the command again.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Update shareDiscordUsername preference
+  submissionData.shareDiscordUsername = shareUsername;
+
+  // Now ask about website consent
+  await interaction.update({
     content: '💖 Would you like to consent to feature your submission on the BobaTalks website?',
-    flags: MessageFlags.Ephemeral,
     components: [
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
         new ButtonBuilder()
@@ -208,7 +269,10 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
   // Update consent
   submissionData.hasConsent = hasConsent;
 
-  // Process the flower submission
+  // Defer the interaction to prevent token expiration during async operations
+  await interaction.deferUpdate();
+
+  // Process the flower submission directly
   await processFlowerSubmission(interaction, submissionData);
 }
 
@@ -267,6 +331,7 @@ async function processFlowerSubmission(
     name: string;
     username: string;
     hasConsent?: boolean;
+    shareDiscordUsername?: boolean;
   },
 ) {
   const {
@@ -275,6 +340,7 @@ async function processFlowerSubmission(
     name: nameInput,
     username,
     hasConsent = false,
+    shareDiscordUsername = false,
   } = submissionData;
 
   let createdFlowerId: string | undefined;
@@ -284,7 +350,18 @@ async function processFlowerSubmission(
     // Upload image to Google Drive if attachment exists
     if (attachmentData) {
       try {
-        driveImageUrl = await saveDiscordImageToDrive(attachmentData.url);
+        // Create a timeout promise that rejects after 1 minute
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('Google Drive upload timed out after 1 minute'));
+          }, 60000); // 1 minute = 60000ms
+        });
+
+        // Race between the upload and the timeout
+        driveImageUrl = await Promise.race([
+          saveDiscordImageToDrive(attachmentData.url),
+          timeoutPromise,
+        ]);
         console.log(`Successfully uploaded image to Google Drive: ${driveImageUrl}`);
       } catch (uploadError) {
         console.error('Error uploading image to Google Drive:', uploadError);
@@ -304,24 +381,53 @@ async function processFlowerSubmission(
 
     createdFlowerId = createdFlower.id;
 
-    // Create embed and response message using drive image URL
-    const displayName = nameInput || username;
+    // Determine display name based on name field and Discord username sharing preference
+    let displayName: string;
+    const nameIsEmpty = !nameInput || nameInput.trim() === '';
+
+    if (nameIsEmpty) {
+      // If name field is empty, check if user wants to share Discord username
+      if (shareDiscordUsername) {
+        // User consented to share Discord username
+        displayName = username;
+      } else {
+        // User chose not to share Discord username
+        displayName = 'Anonymous';
+      }
+    } else {
+      // If name field is filled, use the provided name
+      displayName = nameInput.trim();
+    }
+
+    // Prefer displaying Drive image upload if available; fallback to direct attachment only if no Drive URL
     const embedAttachmentData = driveImageUrl
       ? {
           url: driveImageUrl,
           contentType: attachmentData?.contentType || 'image/png',
           filename: attachmentData?.filename || 'image',
         }
-      : undefined;
+      : attachmentData;
+
     const embed = createFlowerEmbed(message, displayName, embedAttachmentData);
-    const imageUploadFailed = attachmentData && !driveImageUrl;
+
+    // Detect image upload failure if attachment present but no drive URL
+    const imageUploadFailed = !!(attachmentData && !driveImageUrl);
+
     const responseMessage = createResponseMessage(hasConsent, imageUploadFailed);
 
     try {
-      await interaction.update({
-        content: responseMessage,
-        components: [], // Remove buttons
-      });
+      // Use editReply if interaction was deferred, otherwise use update
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({
+          content: responseMessage,
+          components: [], // Remove buttons
+        });
+      } else {
+        await interaction.update({
+          content: responseMessage,
+          components: [], // Remove buttons
+        });
+      }
 
       // Post the flower to the channel
       if (interaction.channel && 'send' in interaction.channel) {
@@ -342,16 +448,29 @@ async function processFlowerSubmission(
     console.error('Error submitting flower:', error);
     pendingSubmissions.delete(interaction.user.id);
 
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: '❌ An error occurred while submitting your flower. Please try again.',
-        flags: MessageFlags.Ephemeral,
-      });
-    } else if (interaction.isRepliable()) {
-      await interaction.followUp({
-        content: '❌ An error occurred while submitting your flower. Please try again.',
-        flags: MessageFlags.Ephemeral,
-      });
+    try {
+      if (interaction.deferred || interaction.replied) {
+        // If already deferred/replied, use editReply or followUp
+        if (interaction.deferred) {
+          await interaction.editReply({
+            content: '❌ An error occurred while submitting your flower. Please try again.',
+            components: [],
+          });
+        } else {
+          await interaction.followUp({
+            content: '❌ An error occurred while submitting your flower. Please try again.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+      } else {
+        await interaction.reply({
+          content: '❌ An error occurred while submitting your flower. Please try again.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+    } catch (replyError) {
+      // If we can't reply (e.g., interaction expired), just log it
+      console.error('Error sending error message to user:', replyError);
     }
   }
 }
