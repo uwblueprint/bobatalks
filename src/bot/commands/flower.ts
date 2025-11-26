@@ -373,7 +373,7 @@ async function processFlowerSubmission(
     // Create flower entry in Google Sheets with drive link
     const createdFlower = await createFlower({
       name: nameInput || undefined,
-      username: username,
+      username: shareDiscordUsername ? username : undefined,
       message: message,
       picture: driveImageUrl,
       website: hasConsent,
