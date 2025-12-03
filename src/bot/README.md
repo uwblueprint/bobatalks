@@ -109,11 +109,63 @@ The `/flower` command opens an interactive modal form where users can submit mes
 - **Content Validation**: Simple profanity filter to keep messages positive and respectful
 - **Public Posting**: Submissions are posted to the channel with a beautiful embed
 - **Agreement**: By submitting, users agree to be featured on the BobaTalks website
+- **Admin Logging**: All submissions are logged to the `flowers-mod` channel for spam prevention and auditing
 
 **Example Uses:**
 
 - "I finally landed my first internship!"
 - "Shoutout to Eileen for being so supportive at my event last weekend!"
+
+#### 🔐 Setting Up the Flowers-Mod Channel (Admin Only)
+
+To enable admin logging and prevent spam/abuse of the flower command, create a private moderation channel.
+
+##### Step-by-Step Setup Instructions:
+
+**1. Create a channel named "flowers-mod" in your Discord server**
+
+**2. Configure channel permissions to make it private:**
+
+- Go to Channel Settings → Permissions
+- Click on `@everyone` and set "View Channel" to ❌ (red X/deny)
+- Click "+ Add members or roles"
+- Select your admin/moderator role(s)
+- For each admin role, grant these permissions (set to ✅ green checkmark):
+  - View Channel
+  - Read Message History (so they can see past logs)
+  - Send Messages (optional, for adding notes)
+
+**3. Ensure the bot has permissions in this channel:**
+
+- In the same Permissions settings, click "+ Add members or roles"
+- Add your bot's role
+- Grant the bot these permissions (set to ✅ green checkmark):
+  - View Channel
+  - Send Messages
+  - Embed Links
+
+##### Permission Visibility Explanation:
+
+Discord channels use permission overwrites to control access. When you remove `@everyone`'s "View Channel" permission, the channel becomes **hidden from regular members**. Only users/roles with explicit "View Channel" permission can see it. This ensures that only admins/mods you designate can view the flower usage logs.
+
+##### What Gets Logged:
+
+Every time someone uses `/flower`, the bot sends a streamlined log to `flowers-mod` containing:
+
+- **Clickable title** that links directly to the public flower message (click "🔍 Jump to message →")
+- Full username (to identify who sent it)
+- Display name (shows if they're anonymous or what name they provided)
+- Exact timestamp (for tracking submission patterns)
+- Full message content (to detect spam or inappropriate content)
+- **Embedded image** (the actual image displayed right in the log for easy debugging)
+- Flower ID from Google Sheets (for cross-referencing)
+
+##### Why This Matters:
+
+- **Spam Prevention**: Track if someone is overusing the command
+- **Anonymous Accountability**: Even anonymous submissions are logged for admins
+- **Audit Trail**: Full traceability for moderation purposes
+- **Privacy**: Only designated admins can see this sensitive information
 
 ---
 

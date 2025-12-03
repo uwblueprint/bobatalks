@@ -13,6 +13,8 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ButtonInteraction,
+  TextChannel,
+  Guild,
 } from 'discord.js';
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 
@@ -39,6 +41,90 @@ const matcher = new RegExpMatcher({
 
 function containsInappropriateContent(text: string): boolean {
   return matcher.hasMatch(text);
+}
+
+/**
+ * Logs flower command usage to the private flowers-mod channel for admin auditing.
+ * This helps prevent spam and tracks anonymous submissions.
+ */
+async function logFlowerUsageToModChannel(
+  guild: Guild | null,
+  logData: {
+    username: string;
+    discriminator: string;
+    timestamp: Date;
+    message: string;
+    nameProvided?: string;
+    flowerId?: string;
+    messageUrl?: string;
+    imageUrl?: string;
+  },
+) {
+  if (!guild) {
+    console.warn('Cannot log flower usage: guild is null');
+    return;
+  }
+
+  try {
+    // Find the flowers-mod channel
+    const modChannel = guild.channels.cache.find(
+      (channel) => channel.name === 'flowers-mod' && channel.isTextBased(),
+    ) as TextChannel | undefined;
+
+    if (!modChannel) {
+      console.warn(
+        'flowers-mod channel not found. Please create a private channel named "flowers-mod" for logging.',
+      );
+      return;
+    }
+
+    // Create audit log embed
+    const logEmbed = new EmbedBuilder()
+      .setColor('#FFA500') // Orange color for mod logs
+      .setTitle(logData.messageUrl ? '🔍 Jump to message →' : '🔍 Flower Command Usage Log')
+      .setURL(logData.messageUrl || null)
+      .addFields(
+        {
+          name: '📛 Username',
+          value:
+            logData.discriminator === '0'
+              ? logData.username
+              : `${logData.username}#${logData.discriminator}`,
+          inline: true,
+        },
+        {
+          name: '🏷️ Display Name',
+          value: logData.nameProvided || '_(Anonymous)_',
+          inline: true,
+        },
+        {
+          name: '⏰ Timestamp',
+          value: `<t:${Math.floor(logData.timestamp.getTime() / 1000)}:F>`,
+          inline: false,
+        },
+        {
+          name: '📝 Message Content',
+          value:
+            logData.message.length > 1024
+              ? logData.message.substring(0, 1021) + '...'
+              : logData.message,
+          inline: false,
+        },
+      )
+      .setFooter({
+        text: `Flower ID: ${logData.flowerId || 'N/A'} | For admin use only`,
+      })
+      .setTimestamp();
+
+    // Embed the image if one was attached
+    if (logData.imageUrl) {
+      logEmbed.setImage(logData.imageUrl);
+    }
+
+    await modChannel.send({ embeds: [logEmbed] });
+  } catch (error) {
+    console.error('Error logging flower usage to mod channel:', error);
+  }
 }
 
 // Temporary storage for image attachments and submission data (userId -> data)
@@ -269,8 +355,11 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
   // Update consent
   submissionData.hasConsent = hasConsent;
 
-  // Defer the interaction to prevent token expiration during async operations
-  await interaction.deferUpdate();
+  // Show loading message immediately
+  await interaction.update({
+    content: '⏳ Processing your submission... (uploading image, saving to sheets, etc.)',
+    components: [], // Remove buttons
+  });
 
   // Process the flower submission directly
   await processFlowerSubmission(interaction, submissionData);
@@ -430,9 +519,47 @@ async function processFlowerSubmission(
       }
 
       // Post the flower to the channel
+      let publicMessageUrl: string | undefined;
       if (interaction.channel && 'send' in interaction.channel) {
-        await interaction.channel.send({ embeds: [embed] });
+        const publicMessage = await interaction.channel.send({ embeds: [embed] });
+        publicMessageUrl = publicMessage.url;
       }
+
+      // Log to mod channel for auditing (after public message is sent to include the link)
+      const logData: {
+        username: string;
+        discriminator: string;
+        timestamp: Date;
+        message: string;
+        nameProvided?: string;
+        flowerId?: string;
+        messageUrl?: string;
+        imageUrl?: string;
+      } = {
+        username: interaction.user.username,
+        discriminator: interaction.user.discriminator,
+        timestamp: new Date(),
+        message: message,
+      };
+
+      // Only include optional fields if they exist
+      if (nameInput && nameInput.trim() !== '') {
+        logData.nameProvided = nameInput.trim();
+      }
+      if (createdFlowerId) {
+        logData.flowerId = createdFlowerId;
+      }
+      if (publicMessageUrl) {
+        logData.messageUrl = publicMessageUrl;
+      }
+      // Include the Drive image URL if available, otherwise the direct attachment URL
+      if (driveImageUrl) {
+        logData.imageUrl = driveImageUrl;
+      } else if (attachmentData) {
+        logData.imageUrl = attachmentData.url;
+      }
+
+      await logFlowerUsageToModChannel(interaction.guild, logData);
     } catch (discordError) {
       // If Discord message fails, rollback the sheet entry
       console.error('Error sending Discord message, rolling back sheet entry:', discordError);
