@@ -109,11 +109,55 @@ The `/flower` command opens an interactive modal form where users can submit mes
 - **Content Validation**: Simple profanity filter to keep messages positive and respectful
 - **Public Posting**: Submissions are posted to the channel with a beautiful embed
 - **Agreement**: By submitting, users agree to be featured on the BobaTalks website
+- **Admin Logging**: All submissions are logged to the `flowers-mod` channel for spam prevention and auditing
 
 **Example Uses:**
 
 - "I finally landed my first internship!"
 - "Shoutout to Eileen for being so supportive at my event last weekend!"
+
+#### 🔐 Setting Up the Flowers-Mod Channel (Admin Only)
+
+To enable admin logging and prevent spam/abuse of the flower command, create a private moderation channel:
+
+1. **Create the Channel:**
+   - Create a new text channel named exactly `flowers-mod` in your Discord server
+
+2. **Make it Private (Admin-Only):**
+   - Go to Channel Settings → Permissions
+   - Click on `@everyone` and set "View Channel" to ❌ (red X/deny)
+   - Click "+ Add members or roles"
+   - Add your admin/moderator roles
+   - For each admin role, set these permissions to ✅ (green checkmark):
+     - View Channel
+     - Read Message History
+     - Send Messages (optional, for notes)
+
+3. **Grant Bot Access:**
+   - In the same Permissions settings, add your bot's role
+   - Grant these permissions to the bot:
+     - View Channel ✅
+     - Send Messages ✅
+     - Embed Links ✅
+
+**What Gets Logged:**
+
+Every time someone uses `/flower`, the bot sends a streamlined log to `flowers-mod` containing:
+
+- **Clickable title** that links directly to the public flower message (click "🔍 Jump to message →")
+- Full username (to identify who sent it)
+- Display name (shows if they're anonymous or what name they provided)
+- Exact timestamp (for tracking submission patterns)
+- Full message content (to detect spam or inappropriate content)
+- **Embedded image** (the actual image displayed right in the log for easy debugging)
+- Flower ID from Google Sheets (for cross-referencing)
+
+**Why This Matters:**
+
+- **Spam Prevention**: Track if someone is overusing the command
+- **Anonymous Accountability**: Even anonymous submissions are logged for admins
+- **Audit Trail**: Full traceability for moderation purposes
+- **Privacy**: Only designated admins can see this sensitive information
 
 ---
 
