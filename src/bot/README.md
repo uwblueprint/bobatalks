@@ -118,29 +118,37 @@ The `/flower` command opens an interactive modal form where users can submit mes
 
 #### 🔐 Setting Up the Flowers-Mod Channel (Admin Only)
 
-To enable admin logging and prevent spam/abuse of the flower command, create a private moderation channel:
+To enable admin logging and prevent spam/abuse of the flower command, create a private moderation channel.
 
-1. **Create the Channel:**
-   - Create a new text channel named exactly `flowers-mod` in your Discord server
+##### Step-by-Step Setup Instructions:
 
-2. **Make it Private (Admin-Only):**
-   - Go to Channel Settings → Permissions
-   - Click on `@everyone` and set "View Channel" to ❌ (red X/deny)
-   - Click "+ Add members or roles"
-   - Add your admin/moderator roles
-   - For each admin role, set these permissions to ✅ (green checkmark):
-     - View Channel
-     - Read Message History
-     - Send Messages (optional, for notes)
+**1. Create a channel named "flowers-mod" in your Discord server**
 
-3. **Grant Bot Access:**
-   - In the same Permissions settings, add your bot's role
-   - Grant these permissions to the bot:
-     - View Channel ✅
-     - Send Messages ✅
-     - Embed Links ✅
+**2. Configure channel permissions to make it private:**
 
-**What Gets Logged:**
+- Go to Channel Settings → Permissions
+- Click on `@everyone` and set "View Channel" to ❌ (red X/deny)
+- Click "+ Add members or roles"
+- Select your admin/moderator role(s)
+- For each admin role, grant these permissions (set to ✅ green checkmark):
+  - View Channel
+  - Read Message History (so they can see past logs)
+  - Send Messages (optional, for adding notes)
+
+**3. Ensure the bot has permissions in this channel:**
+
+- In the same Permissions settings, click "+ Add members or roles"
+- Add your bot's role
+- Grant the bot these permissions (set to ✅ green checkmark):
+  - View Channel
+  - Send Messages
+  - Embed Links
+
+##### Permission Visibility Explanation:
+
+Discord channels use permission overwrites to control access. When you remove `@everyone`'s "View Channel" permission, the channel becomes **hidden from regular members**. Only users/roles with explicit "View Channel" permission can see it. This ensures that only admins/mods you designate can view the flower usage logs.
+
+##### What Gets Logged:
 
 Every time someone uses `/flower`, the bot sends a streamlined log to `flowers-mod` containing:
 
@@ -152,7 +160,7 @@ Every time someone uses `/flower`, the bot sends a streamlined log to `flowers-m
 - **Embedded image** (the actual image displayed right in the log for easy debugging)
 - Flower ID from Google Sheets (for cross-referencing)
 
-**Why This Matters:**
+##### Why This Matters:
 
 - **Spam Prevention**: Track if someone is overusing the command
 - **Anonymous Accountability**: Even anonymous submissions are logged for admins

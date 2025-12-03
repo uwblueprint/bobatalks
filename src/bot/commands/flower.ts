@@ -46,38 +46,6 @@ function containsInappropriateContent(text: string): boolean {
 /**
  * Logs flower command usage to the private flowers-mod channel for admin auditing.
  * This helps prevent spam and tracks anonymous submissions.
- *
- * SETUP INSTRUCTIONS FOR ADMINS:
- *
- * 1. Create a channel named "flowers-mod" in your Discord server
- *
- * 2. Configure channel permissions to make it private:
- *    a. Go to Channel Settings → Permissions
- *    b. Remove @everyone's "View Channel" permission (set to X/red)
- *    c. Add specific roles/users who should have access:
- *       - Click "+ Add members or roles"
- *       - Select your admin/moderator role(s)
- *       - Grant them "View Channel" permission (set to ✓/green)
- *       - Also grant "Read Message History" so they can see past logs
- *
- * 3. Ensure the bot has permissions in this channel:
- *    a. Add the bot role to the channel permissions
- *    b. Grant "View Channel", "Send Messages", and "Embed Links" permissions
- *
- * PERMISSION VISIBILITY EXPLANATION:
- * Discord channels use permission overwrites to control access. When you remove
- * @everyone's "View Channel" permission, the channel becomes hidden from regular
- * members. Only users/roles with explicit "View Channel" permission can see it.
- * This ensures that only admins/mods you designate can view the flower usage logs.
- *
- * The logs include:
- * - Direct link to the public flower message (clickable title to jump to it)
- * - Username (for identifying who sent flowers)
- * - Display name (shows if anonymous or what name they provided)
- * - Full timestamp (for tracking when submissions occur)
- * - Message content (to detect spam or inappropriate use)
- * - Embedded image (for quick visual inspection without clicking through)
- * - Flower ID from Google Sheets (for cross-referencing)
  */
 async function logFlowerUsageToModChannel(
   guild: Guild | null,
