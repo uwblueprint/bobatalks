@@ -118,7 +118,10 @@ async function logFlowerUsageToModChannel(
       .addFields(
         {
           name: '📛 Username',
-          value: `${logData.username}#${logData.discriminator}`,
+          value:
+            logData.discriminator === '0'
+              ? logData.username
+              : `${logData.username}#${logData.discriminator}`,
           inline: true,
         },
         {
@@ -384,8 +387,11 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
   // Update consent
   submissionData.hasConsent = hasConsent;
 
-  // Defer the interaction to prevent token expiration during async operations
-  await interaction.deferUpdate();
+  // Show loading message immediately
+  await interaction.update({
+    content: '⏳ Processing your submission... (uploading image, saving to sheets, etc.)',
+    components: [], // Remove buttons
+  });
 
   // Process the flower submission directly
   await processFlowerSubmission(interaction, submissionData);
