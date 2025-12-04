@@ -13,10 +13,17 @@ import { pollCommand } from './commands/poll.js';
 import { serverinfoCommand } from './commands/serverinfo.js';
 import { userinfoCommand } from './commands/userinfo.js';
 import { welcomeCommand } from './commands/welcome.js';
+import {
+  handleFlowerChannelMessage,
+  handleModerationApprove,
+  handleModerationDecline,
+} from './moderationWorkflow.js';
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
     // GatewayIntentBits.GuildMembers, // Uncomment if you enable this privileged intent in Discord Developer Portal
   ],
 });
@@ -24,6 +31,15 @@ const client = new Client({
 client.once(Events.ClientReady, (c) => {
   console.log(`✅ Logged in as ${c.user.tag}`);
   console.log(`📊 Serving ${c.guilds.cache.size} server(s)`);
+});
+
+// Listen for messages in the flowers channel for moderation workflow
+client.on(Events.MessageCreate, async (message) => {
+  try {
+    await handleFlowerChannelMessage(message);
+  } catch (error) {
+    console.error('Error handling flower channel message:', error);
+  }
 });
 
 client.on('interactionCreate', async (interaction: Interaction) => {
@@ -34,6 +50,10 @@ client.on('interactionCreate', async (interaction: Interaction) => {
         await handleFlowerConsentButton(interaction);
       } else if (interaction.customId.startsWith('flowerShareUsername_')) {
         await handleFlowerShareUsernameButton(interaction);
+      } else if (interaction.customId.startsWith('moderationApprove_')) {
+        await handleModerationApprove(interaction);
+      } else if (interaction.customId.startsWith('moderationDecline_')) {
+        await handleModerationDecline(interaction);
       }
     } catch (error) {
       console.error('Error handling button interaction:', error);

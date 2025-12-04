@@ -20,6 +20,7 @@ import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'o
 
 import { saveDiscordImageToDrive } from '../googleDriveImages.js';
 import { createFlower, deleteFlower } from '../googleSheetsService.js';
+import { sendFlowerToModeration } from '../moderationWorkflow.js';
 
 export const flower = new SlashCommandBuilder()
   .setName('flower')
@@ -560,6 +561,20 @@ async function processFlowerSubmission(
       }
 
       await logFlowerUsageToModChannel(interaction.guild, logData);
+
+      // If user has consent for website publishing, send to moderation workflow
+      if (hasConsent && createdFlowerId && publicMessageUrl) {
+        await sendFlowerToModeration(
+          interaction.guild,
+          createdFlowerId,
+          publicMessageUrl,
+          message,
+          displayName,
+          interaction.user.username,
+          driveImageUrl || attachmentData?.url,
+          new Date(),
+        );
+      }
     } catch (discordError) {
       // If Discord message fails, rollback the sheet entry
       console.error('Error sending Discord message, rolling back sheet entry:', discordError);
