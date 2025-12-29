@@ -373,11 +373,10 @@ function createFlowerEmbed(
 ): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setColor('#FF69B4') // Pink color for flowers
-    .setTitle('🌸 New Flower Submission 💐')
+    .setTitle('🌸🌺🌼')
     .setDescription(message)
-    .addFields({ name: 'Submitted by', value: displayName, inline: true })
-    .setFooter({ text: 'Thank you for celebrating with us! 🌸' })
-    .setTimestamp();
+    .addFields({ name: '\u200b', value: `Submitted by ${displayName}`, inline: true })
+    .setFooter({ text: 'Thank you for celebrating with us! 🌸' });
 
   // Add image if provided
   if (attachmentData) {
