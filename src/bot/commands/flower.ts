@@ -375,8 +375,7 @@ function createFlowerEmbed(
     .setColor('#FF69B4') // Pink color for flowers
     .setTitle('🌸🌺🌼')
     .setDescription(message)
-    .addFields({ name: '\u200b', value: `Submitted by ${displayName}`, inline: true })
-    .setFooter({ text: 'Thank you for celebrating with us! 🌸' });
+    .setFooter({ text: `Submitted by ${displayName} • Thank you for celebrating with us! 🌸` });
 
   // Add image if provided
   if (attachmentData) {
