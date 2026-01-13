@@ -8,11 +8,6 @@ import {
   handleFlowerConsentButton,
   handleFlowerShareUsernameButton,
 } from './commands/flower.js';
-import { pingCommand } from './commands/ping.js';
-import { pollCommand } from './commands/poll.js';
-import { serverinfoCommand } from './commands/serverinfo.js';
-import { userinfoCommand } from './commands/userinfo.js';
-import { welcomeCommand } from './commands/welcome.js';
 import {
   handleFlowerChannelMessage,
   handleModerationApprove,
@@ -105,21 +100,6 @@ client.on('interactionCreate', async (interaction: Interaction) => {
 
   try {
     switch (interaction.commandName) {
-      case 'ping':
-        await pingCommand(interaction);
-        break;
-      case 'serverinfo':
-        await serverinfoCommand(interaction);
-        break;
-      case 'userinfo':
-        await userinfoCommand(interaction);
-        break;
-      case 'poll':
-        await pollCommand(interaction);
-        break;
-      case 'welcome':
-        await welcomeCommand(interaction);
-        break;
       case 'flower':
         await flowerCommand(interaction);
         break;
