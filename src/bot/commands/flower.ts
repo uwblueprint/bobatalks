@@ -371,11 +371,16 @@ function createFlowerEmbed(
   displayName: string,
   attachmentData?: { url: string; contentType: string; filename: string },
 ): EmbedBuilder {
+  const footerText =
+    displayName === 'Anonymous'
+      ? 'Thank you for celebrating with us! 🌸'
+      : `Submitted by ${displayName}\nThank you for celebrating with us! 🌸`;
+
   const embed = new EmbedBuilder()
     .setColor('#FF69B4') // Pink color for flowers
     .setTitle('🌸🌺🌼')
     .setDescription(message)
-    .setFooter({ text: `Submitted by ${displayName} • Thank you for celebrating with us! 🌸` });
+    .setFooter({ text: footerText });
 
   // Add image if provided
   if (attachmentData) {
