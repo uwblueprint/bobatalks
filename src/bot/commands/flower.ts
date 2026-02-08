@@ -373,7 +373,7 @@ function createFlowerEmbed(
 ): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setColor('#FF69B4') // Pink color for flowers
-    .setTitle('🌸🌺🌼')
+    .setTitle('🌸🌺🌼💐')
     .setDescription(message)
     .setFooter({ text: `Submitted by ${displayName} • Thank you for celebrating with us! 🌸` });
 
