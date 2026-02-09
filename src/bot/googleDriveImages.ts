@@ -73,6 +73,7 @@ export async function uploadImageToDrive(buffer: Buffer, contentType: string): P
     requestBody: fileMetadata,
     media: media,
     fields: 'id',
+    supportsAllDrives: true,
   });
 
   const fileId = file.data.id;
@@ -87,6 +88,7 @@ export async function uploadImageToDrive(buffer: Buffer, contentType: string): P
       role: 'reader',
       type: 'anyone',
     },
+    supportsAllDrives: true,
   });
 
   // Return link
