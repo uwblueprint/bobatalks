@@ -155,8 +155,8 @@ export interface ModerationFlowerData {
   userId: string;
   serverNickname: string;
   avatarUrl: string;
-  imageUrl?: string;
-  timestamp?: Date;
+  imageUrl?: string | undefined;
+  timestamp?: Date | undefined;
 }
 
 function findGuildEmoji(guild: Guild, name: string): string {
