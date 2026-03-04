@@ -183,7 +183,6 @@ export async function sendFlowerToModeration(guild: Guild | null, data: Moderati
     }
 
     const flowerEmoji = findGuildEmoji(guild, 'flower_strawberry_alice');
-    const logoEmoji = findGuildEmoji(guild, 'logo_BT') || '🌺 ';
     const modmailEmoji = findGuildEmoji(guild, 'modmail_BT') || '📢 ';
 
     const authorName = `${data.serverNickname} (@${data.discordUsername}) || ${data.flowersDisplayName}`;
@@ -199,11 +198,6 @@ export async function sendFlowerToModeration(guild: Guild | null, data: Moderati
       .addFields(
         {
           name: '🏵 Pending',
-          value: 'Needs Review',
-          inline: true,
-        },
-        {
-          name: `${logoEmoji}Reviewer`,
           value: 'Needs Review',
           inline: true,
         },
@@ -253,19 +247,20 @@ export async function handleModerationApprove(interaction: ButtonInteraction) {
     await updateFlower(flowerId, 'approved', 'true');
 
     const originalEmbed = interaction.message.embeds[0];
-    const reviewerFieldName = originalEmbed.fields[1]?.name ?? '🌺 Reviewer';
+    const guild = interaction.guild;
+    const logoEmoji = guild ? findGuildEmoji(guild, 'logo_BT') || '🌺 ' : '🌺 ';
     const updatedEmbed = EmbedBuilder.from(originalEmbed)
       .setColor('#00FF00')
       .spliceFields(
         0,
-        2,
+        1,
         {
           name: '✅ Approved',
           value: `<t:${Math.floor(Date.now() / 1000)}:F>`,
           inline: true,
         },
         {
-          name: reviewerFieldName,
+          name: `${logoEmoji}Reviewer`,
           value: `<@${interaction.user.id}>`,
           inline: true,
         },
@@ -297,19 +292,20 @@ export async function handleModerationDecline(interaction: ButtonInteraction) {
     await updateFlower(flowerId, 'approved', 'false');
 
     const originalEmbed = interaction.message.embeds[0];
-    const reviewerFieldName = originalEmbed.fields[1]?.name ?? '🌺 Reviewer';
+    const guild = interaction.guild;
+    const logoEmoji = guild ? findGuildEmoji(guild, 'logo_BT') || '🌺 ' : '🌺 ';
     const updatedEmbed = EmbedBuilder.from(originalEmbed)
       .setColor('#FF0000')
       .spliceFields(
         0,
-        2,
+        1,
         {
           name: '❌ Declined',
           value: `<t:${Math.floor(Date.now() / 1000)}:F>`,
           inline: true,
         },
         {
-          name: reviewerFieldName,
+          name: `${logoEmoji}Reviewer`,
           value: `<@${interaction.user.id}>`,
           inline: true,
         },
