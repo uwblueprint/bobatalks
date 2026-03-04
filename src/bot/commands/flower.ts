@@ -15,6 +15,7 @@ import {
   ButtonInteraction,
   TextChannel,
   Guild,
+  GuildMember,
 } from 'discord.js';
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 
@@ -48,11 +49,13 @@ function containsInappropriateContent(text: string): boolean {
  * Logs flower command usage to the private flowers-mod channel for admin auditing.
  * This helps prevent spam and tracks anonymous submissions.
  */
+const FLOWERS_MOD_CHANNEL_ID = '1082514729311948850';
+
 async function logFlowerUsageToModChannel(
   guild: Guild | null,
   logData: {
     username: string;
-    discriminator: string;
+    userId: string;
     timestamp: Date;
     message: string;
     nameProvided?: string;
@@ -67,57 +70,35 @@ async function logFlowerUsageToModChannel(
   }
 
   try {
-    // Find the flowers-mod channel
-    const modChannel = guild.channels.cache.find(
-      (channel) => channel.name === 'flowers-mod' && channel.isTextBased(),
-    ) as TextChannel | undefined;
+    const modChannel = guild.channels.cache.get(FLOWERS_MOD_CHANNEL_ID) as TextChannel | undefined;
 
     if (!modChannel) {
       console.warn(
-        'flowers-mod channel not found. Please create a private channel named "flowers-mod" for logging.',
+        `flowers-mod channel (ID: ${FLOWERS_MOD_CHANNEL_ID}) not found. Verify the channel ID is correct.`,
       );
       return;
     }
 
-    // Create audit log embed
+    const flowerEmoji = guild.emojis.cache.find((e) => e.name === 'flower_strawberry_alice');
+    const titleEmoji = flowerEmoji ? `${flowerEmoji} ` : '🌸 ';
+
     const logEmbed = new EmbedBuilder()
-      .setColor('#FFA500') // Orange color for mod logs
-      .setTitle(logData.messageUrl ? '🔍 Jump to message →' : '🔍 Flower Command Usage Log')
+      .setColor('#FFA500')
+      .setAuthor({ name: logData.username })
+      .setTitle(`${titleEmoji}Flower Submitted`)
       .setURL(logData.messageUrl || null)
-      .addFields(
-        {
-          name: '📛 Username',
-          value:
-            logData.discriminator === '0'
-              ? logData.username
-              : `${logData.username}#${logData.discriminator}`,
-          inline: true,
-        },
-        {
-          name: '🏷️ Display Name',
-          value: logData.nameProvided || '_(Anonymous)_',
-          inline: true,
-        },
-        {
-          name: '⏰ Timestamp',
-          value: `<t:${Math.floor(logData.timestamp.getTime() / 1000)}:F>`,
-          inline: false,
-        },
-        {
-          name: '📝 Message Content',
-          value:
-            logData.message.length > 1024
-              ? logData.message.substring(0, 1021) + '...'
-              : logData.message,
-          inline: false,
-        },
+      .setDescription(
+        `By <@${logData.userId}> at <t:${Math.floor(logData.timestamp.getTime() / 1000)}:F>`,
       )
-      .setFooter({
-        text: `Flower ID: ${logData.flowerId || 'N/A'} | For admin use only`,
+      .addFields({
+        name: '📝 Message',
+        value:
+          logData.message.length > 1024
+            ? logData.message.substring(0, 1021) + '...'
+            : logData.message,
       })
       .setTimestamp();
 
-    // Embed the image if one was attached
     if (logData.imageUrl) {
       logEmbed.setImage(logData.imageUrl);
     }
@@ -369,20 +350,17 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
 function createFlowerEmbed(
   message: string,
   displayName: string,
+  avatarUrl?: string,
   attachmentData?: { url: string; contentType: string; filename: string },
 ): EmbedBuilder {
-  const footerText =
-    displayName === 'Anonymous'
-      ? 'Thank you for celebrating with us! 🌸'
-      : `Submitted by ${displayName}\nThank you for celebrating with us! 🌸`;
-
   const embed = new EmbedBuilder()
-    .setColor('#FF69B4') // Pink color for flowers
-    .setTitle('🌸🌺🌼💐')
-    .setDescription(message)
-    .setFooter({ text: footerText });
+    .setColor('#FF69B4')
+    .setAuthor({
+      name: displayName,
+      ...(avatarUrl ? { iconURL: avatarUrl } : {}),
+    })
+    .setDescription(message);
 
-  // Add image if provided
   if (attachmentData) {
     embed.setImage(attachmentData.url);
   }
@@ -476,21 +454,25 @@ async function processFlowerSubmission(
 
     // Determine display name based on name field and Discord username sharing preference
     let displayName: string;
+    let avatarUrl: string | undefined;
     const nameIsEmpty = !nameInput || nameInput.trim() === '';
 
     if (nameIsEmpty) {
-      // If name field is empty, check if user wants to share Discord username
       if (shareDiscordUsername) {
-        // User consented to share Discord username
-        displayName = username;
+        const member = interaction.member as GuildMember | null;
+        displayName = member?.displayName ?? username;
+        avatarUrl = interaction.user.displayAvatarURL();
       } else {
-        // User chose not to share Discord username
         displayName = 'Anonymous';
+        avatarUrl = undefined;
       }
     } else {
-      // If name field is filled, use the provided name
       displayName = nameInput.trim();
+      avatarUrl = interaction.user.displayAvatarURL();
     }
+
+    const serverNickname =
+      (interaction.member as GuildMember | null)?.displayName ?? interaction.user.displayName;
 
     // Prefer displaying Drive image upload if available; fallback to direct attachment only if no Drive URL
     const embedAttachmentData = driveImageUrl
@@ -501,7 +483,7 @@ async function processFlowerSubmission(
         }
       : attachmentData;
 
-    const embed = createFlowerEmbed(message, displayName, embedAttachmentData);
+    const embed = createFlowerEmbed(message, displayName, avatarUrl, embedAttachmentData);
 
     // Detect image upload failure if attachment present but no drive URL
     const imageUploadFailed = !!(attachmentData && !driveImageUrl);
@@ -527,12 +509,22 @@ async function processFlowerSubmission(
       if (interaction.channel && 'send' in interaction.channel) {
         const publicMessage = await interaction.channel.send({ embeds: [embed] });
         publicMessageUrl = publicMessage.url;
+
+        // Auto-react with a flower emoji
+        try {
+          const flowerEmoji = interaction.guild?.emojis.cache.find(
+            (e) => e.name === 'flower_strawberry_alice',
+          );
+          await publicMessage.react(flowerEmoji ?? '🌸');
+        } catch (reactError) {
+          console.warn('Could not auto-react to flower message:', reactError);
+        }
       }
 
       // Log to mod channel for auditing (after public message is sent to include the link)
       const logData: {
         username: string;
-        discriminator: string;
+        userId: string;
         timestamp: Date;
         message: string;
         nameProvided?: string;
@@ -541,12 +533,11 @@ async function processFlowerSubmission(
         imageUrl?: string;
       } = {
         username: interaction.user.username,
-        discriminator: interaction.user.discriminator,
+        userId: interaction.user.id,
         timestamp: new Date(),
         message: message,
       };
 
-      // Only include optional fields if they exist
       if (nameInput && nameInput.trim() !== '') {
         logData.nameProvided = nameInput.trim();
       }
@@ -556,7 +547,6 @@ async function processFlowerSubmission(
       if (publicMessageUrl) {
         logData.messageUrl = publicMessageUrl;
       }
-      // Include the Drive image URL if available, otherwise the direct attachment URL
       if (driveImageUrl) {
         logData.imageUrl = driveImageUrl;
       } else if (attachmentData) {
@@ -565,18 +555,19 @@ async function processFlowerSubmission(
 
       await logFlowerUsageToModChannel(interaction.guild, logData);
 
-      // If user has consent for website publishing, send to moderation workflow
       if (hasConsent && createdFlowerId && publicMessageUrl) {
-        await sendFlowerToModeration(
-          interaction.guild,
-          createdFlowerId,
-          publicMessageUrl,
-          message,
-          displayName,
-          interaction.user.username,
-          driveImageUrl || attachmentData?.url,
-          new Date(),
-        );
+        await sendFlowerToModeration(interaction.guild, {
+          flowerId: createdFlowerId,
+          messageUrl: publicMessageUrl,
+          messageContent: message,
+          flowersDisplayName: displayName,
+          discordUsername: interaction.user.username,
+          userId: interaction.user.id,
+          serverNickname,
+          avatarUrl: interaction.user.displayAvatarURL(),
+          imageUrl: driveImageUrl || attachmentData?.url,
+          timestamp: new Date(),
+        });
       }
     } catch (discordError) {
       // If Discord message fails, rollback the sheet entry

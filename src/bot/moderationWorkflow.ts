@@ -146,27 +146,31 @@ async function sendToModerationWorkflow(message: Message, flowerId: string) {
   }
 }
 
-/**
- * Sends a flower submission directly to the moderation workflow.
- * This is called from the flower submission process when a user provides consent.
- */
-export async function sendFlowerToModeration(
-  guild: Guild | null,
-  flowerId: string,
-  messageUrl: string,
-  messageContent: string,
-  submittedBy: string,
-  discordUsername: string,
-  imageUrl?: string,
-  timestamp?: Date,
-) {
+export interface ModerationFlowerData {
+  flowerId: string;
+  messageUrl: string;
+  messageContent: string;
+  flowersDisplayName: string;
+  discordUsername: string;
+  userId: string;
+  serverNickname: string;
+  avatarUrl: string;
+  imageUrl?: string;
+  timestamp?: Date;
+}
+
+function findGuildEmoji(guild: Guild, name: string): string {
+  const emoji = guild.emojis.cache.find((e) => e.name === name);
+  return emoji ? `${emoji} ` : '';
+}
+
+export async function sendFlowerToModeration(guild: Guild | null, data: ModerationFlowerData) {
   if (!guild) {
     console.warn('Cannot send to moderation: guild is null');
     return;
   }
 
   try {
-    // Find the moderation-workflow channel
     const modChannel = guild.channels.cache.find(
       (channel) => channel.name === 'moderation-workflow' && channel.isTextBased(),
     ) as TextChannel | undefined;
@@ -178,73 +182,66 @@ export async function sendFlowerToModeration(
       return;
     }
 
-    // Create moderation embed similar to flowers-mod style
+    const flowerEmoji = findGuildEmoji(guild, 'flower_strawberry_alice');
+    const logoEmoji = findGuildEmoji(guild, 'logo_BT') || '🌺 ';
+    const modmailEmoji = findGuildEmoji(guild, 'modmail_BT') || '📢 ';
+
+    const authorName = `${data.serverNickname} (@${data.discordUsername}) || ${data.flowersDisplayName}`;
+
+    const truncatedContent =
+      data.messageContent.length > 1024
+        ? data.messageContent.substring(0, 1021) + '...'
+        : data.messageContent;
+
     const modEmbed = new EmbedBuilder()
-      .setColor('#FFD700') // Gold color for moderation
-      .setTitle('🔍 Jump to Message →')
-      .setURL(messageUrl)
+      .setColor('#FFD700')
+      .setAuthor({ name: authorName, iconURL: data.avatarUrl })
       .addFields(
         {
-          name: '📛 Submitted by',
-          value: `${discordUsername} (Display: ${submittedBy})`,
+          name: '🏵 Pending',
+          value: 'Needs Review',
           inline: true,
         },
         {
-          name: '⏰ Submitted at',
-          value: `<t:${Math.floor((timestamp || new Date()).getTime() / 1000)}:F>`,
-          inline: false,
+          name: `${logoEmoji}Reviewer`,
+          value: 'Needs Review',
+          inline: true,
         },
         {
-          name: '📝 Message Content',
-          value:
-            messageContent.length > 1024
-              ? messageContent.substring(0, 1021) + '...'
-              : messageContent,
-          inline: false,
-        },
-        {
-          name: '📊 Status',
-          value: '⏳ Awaiting moderation decision',
+          name: `${modmailEmoji}[Message →](${data.messageUrl})`,
+          value: truncatedContent,
           inline: false,
         },
       )
-      .setFooter({
-        text: `Flower ID: ${flowerId} | Requires approval for website publication`,
-      })
-      .setTimestamp();
+      .setFooter({ text: `${flowerEmoji}ID: ${data.flowerId}` })
+      .setTimestamp(data.timestamp || new Date());
 
-    // Embed the image if one was attached
-    if (imageUrl) {
-      modEmbed.setImage(imageUrl);
+    if (data.imageUrl) {
+      modEmbed.setImage(data.imageUrl);
     }
 
-    // Create approve/decline buttons
     const buttons = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`moderationApprove_${flowerId}`)
+        .setCustomId(`moderationApprove_${data.flowerId}`)
         .setLabel('✅ Approve for Website')
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
-        .setCustomId(`moderationDecline_${flowerId}`)
+        .setCustomId(`moderationDecline_${data.flowerId}`)
         .setLabel('❌ Decline')
         .setStyle(ButtonStyle.Danger),
     );
 
     await modChannel.send({
-      content: '🌸 **New Flower Submission for Review**',
       embeds: [modEmbed],
       components: [buttons],
     });
 
-    console.log(`Posted flower ${flowerId} to moderation workflow channel`);
+    console.log(`Posted flower ${data.flowerId} to moderation workflow channel`);
   } catch (error) {
     console.error('Error sending to moderation workflow:', error);
   }
 }
 
-/**
- * Handles the approve button click in the moderation workflow.
- */
 export async function handleModerationApprove(interaction: ButtonInteraction) {
   const customId = interaction.customId;
   if (!customId.startsWith('moderationApprove_')) return;
@@ -252,26 +249,31 @@ export async function handleModerationApprove(interaction: ButtonInteraction) {
   const flowerId = customId.replace('moderationApprove_', '');
 
   try {
-    // Defer the reply to give us time to process
     await interaction.deferUpdate();
-
-    // Update the flower in Google Sheets to set approved = true
     await updateFlower(flowerId, 'approved', 'true');
 
-    // Update the message to show it's been approved
     const originalEmbed = interaction.message.embeds[0];
+    const reviewerFieldName = originalEmbed.fields[1]?.name ?? '🌺 Reviewer';
     const updatedEmbed = EmbedBuilder.from(originalEmbed)
-      .setColor('#00FF00') // Green for approved
-      .spliceFields(3, 1, {
-        name: '📊 Status',
-        value: `✅ **APPROVED** by <@${interaction.user.id}> at <t:${Math.floor(Date.now() / 1000)}:F>`,
-        inline: false,
-      });
+      .setColor('#00FF00')
+      .spliceFields(
+        0,
+        2,
+        {
+          name: '✅ Approved',
+          value: `<t:${Math.floor(Date.now() / 1000)}:F>`,
+          inline: true,
+        },
+        {
+          name: reviewerFieldName,
+          value: `<@${interaction.user.id}>`,
+          inline: true,
+        },
+      );
 
     await interaction.editReply({
-      content: '✅ **Approved for Website Publication**',
       embeds: [updatedEmbed],
-      components: [], // Remove buttons after action
+      components: [],
     });
 
     console.log(`Flower ${flowerId} approved by ${interaction.user.username}`);
@@ -284,9 +286,6 @@ export async function handleModerationApprove(interaction: ButtonInteraction) {
   }
 }
 
-/**
- * Handles the decline button click in the moderation workflow.
- */
 export async function handleModerationDecline(interaction: ButtonInteraction) {
   const customId = interaction.customId;
   if (!customId.startsWith('moderationDecline_')) return;
@@ -294,26 +293,31 @@ export async function handleModerationDecline(interaction: ButtonInteraction) {
   const flowerId = customId.replace('moderationDecline_', '');
 
   try {
-    // Defer the reply to give us time to process
     await interaction.deferUpdate();
-
-    // Update the flower in Google Sheets to set approved = false (it already defaults to false, but we'll be explicit)
     await updateFlower(flowerId, 'approved', 'false');
 
-    // Update the message to show it's been declined
     const originalEmbed = interaction.message.embeds[0];
+    const reviewerFieldName = originalEmbed.fields[1]?.name ?? '🌺 Reviewer';
     const updatedEmbed = EmbedBuilder.from(originalEmbed)
-      .setColor('#FF0000') // Red for declined
-      .spliceFields(3, 1, {
-        name: '📊 Status',
-        value: `❌ **DECLINED** by <@${interaction.user.id}> at <t:${Math.floor(Date.now() / 1000)}:F>`,
-        inline: false,
-      });
+      .setColor('#FF0000')
+      .spliceFields(
+        0,
+        2,
+        {
+          name: '❌ Declined',
+          value: `<t:${Math.floor(Date.now() / 1000)}:F>`,
+          inline: true,
+        },
+        {
+          name: reviewerFieldName,
+          value: `<@${interaction.user.id}>`,
+          inline: true,
+        },
+      );
 
     await interaction.editReply({
-      content: '❌ **Declined for Website Publication**',
       embeds: [updatedEmbed],
-      components: [], // Remove buttons after action
+      components: [],
     });
 
     console.log(`Flower ${flowerId} declined by ${interaction.user.username}`);
