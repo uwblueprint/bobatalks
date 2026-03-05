@@ -13,8 +13,7 @@ const LINE_HEIGHT_RATIO = 1.45;
 const FONT_FAMILY = 'Inter';
 const TEXT_COLOR = '#4a3252';
 
-const DECOR_HEIGHT = 100;
-const DECOR_PADDING = 30;
+const CONTENT_PADDING = 40;
 const IMAGE_MAX_HEIGHT = 350;
 const IMAGE_CORNER_RADIUS = 8;
 const IMAGE_TEXT_GAP = 24;
@@ -140,43 +139,44 @@ export async function generateFlowerCard(
   const textBlockHeight = lines.length * lineHeight;
 
   const canvasHeight = Math.min(
-    DECOR_HEIGHT +
-      DECOR_PADDING +
-      imgH +
-      IMAGE_TEXT_GAP +
-      textBlockHeight +
-      DECOR_PADDING +
-      DECOR_HEIGHT,
+    CONTENT_PADDING + imgH + IMAGE_TEXT_GAP + textBlockHeight + CONTENT_PADDING,
     MAX_CARD_HEIGHT,
   );
 
   const canvas = createCanvas(CARD_WIDTH, canvasHeight);
   const ctx = canvas.getContext('2d');
 
-  // Pink gradient background matching the template
-  const gradient = ctx.createLinearGradient(0, 0, CARD_WIDTH, canvasHeight);
-  gradient.addColorStop(0, '#fce4f0');
-  gradient.addColorStop(1, '#f8d8f0');
+  // Sample the template's actual gradient colors for a seamless fill
+  const sampleCtx = createCanvas(CARD_WIDTH, TEXT_ONLY_HEIGHT).getContext('2d');
+  sampleCtx.drawImage(bg, 0, 0, CARD_WIDTH, TEXT_ONLY_HEIGHT);
+  const midY = TEXT_ONLY_HEIGHT / 2;
+  const [lr, lg, lb] = sampleCtx.getImageData(0, midY, 1, 1).data;
+  const [rr, rg, rb] = sampleCtx.getImageData(CARD_WIDTH - 1, midY, 1, 1).data;
+
+  const gradient = ctx.createLinearGradient(0, 0, CARD_WIDTH, 0);
+  gradient.addColorStop(0, `rgb(${lr},${lg},${lb})`);
+  gradient.addColorStop(1, `rgb(${rr},${rg},${rb})`);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, CARD_WIDTH, canvasHeight);
 
-  // Floral decorations: top and bottom strips from the template
-  ctx.drawImage(bg, 0, 0, CARD_WIDTH, DECOR_HEIGHT, 0, 0, CARD_WIDTH, DECOR_HEIGHT);
+  // Floral decorations at native scale so flowers match the text-only card
+  const STRIP = 110;
+  ctx.drawImage(bg, 0, 0, CARD_WIDTH, STRIP, 0, 0, CARD_WIDTH, STRIP);
   ctx.drawImage(
     bg,
     0,
-    TEXT_ONLY_HEIGHT - DECOR_HEIGHT,
+    TEXT_ONLY_HEIGHT - STRIP,
     CARD_WIDTH,
-    DECOR_HEIGHT,
+    STRIP,
     0,
-    canvasHeight - DECOR_HEIGHT,
+    canvasHeight - STRIP,
     CARD_WIDTH,
-    DECOR_HEIGHT,
+    STRIP,
   );
 
   // User image with rounded corners
   const imgX = (CARD_WIDTH - imgW) / 2;
-  const imgY = DECOR_HEIGHT + DECOR_PADDING;
+  const imgY = CONTENT_PADDING;
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(imgX, imgY, imgW, imgH, IMAGE_CORNER_RADIUS);
