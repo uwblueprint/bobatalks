@@ -360,17 +360,27 @@ async function buildFlowerMessage(
     ...(avatarUrl ? { iconURL: avatarUrl } : {}),
   });
 
-  try {
-    const cardBuffer = await generateFlowerCard(message, attachmentData?.url);
-    if (cardBuffer) {
-      files.push(new AttachmentBuilder(cardBuffer, { name: 'flower-card.png' }));
-      embed.setImage('attachment://flower-card.png');
-    } else {
+  const useCanvas = process.env.FLOWER_CANVAS_ENABLED === 'true';
+
+  if (useCanvas) {
+    try {
+      const cardBuffer = await generateFlowerCard(message, attachmentData?.url);
+      if (cardBuffer) {
+        files.push(new AttachmentBuilder(cardBuffer, { name: 'flower-card.png' }));
+        embed.setImage('attachment://flower-card.png');
+      } else {
+        embed.setDescription(message);
+      }
+    } catch (error) {
+      console.error('Error generating flower card:', error);
       embed.setDescription(message);
     }
-  } catch (error) {
-    console.error('Error generating flower card:', error);
+  } else {
     embed.setDescription(message);
+    if (attachmentData) {
+      files.push(new AttachmentBuilder(attachmentData.url, { name: 'user-image.png' }));
+      embed.setImage('attachment://user-image.png');
+    }
   }
 
   return { embeds: [embed], files };
