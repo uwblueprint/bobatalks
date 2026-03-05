@@ -369,7 +369,7 @@ async function buildFlowerMessage(
       embed.setDescription(message);
     }
   } catch (error) {
-    console.error('Error generating flower card, falling back to text embed:', error);
+    console.error('Error generating flower card:', error);
     embed.setDescription(message);
   }
 

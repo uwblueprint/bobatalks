@@ -17,9 +17,7 @@ let templateBuffer: Buffer;
 try {
   templateBuffer = readFileSync(templatePath);
 } catch {
-  console.warn(
-    `Flower template not found at ${templatePath} — card generation will be unavailable`,
-  );
+  console.warn(`Flower template not found at ${templatePath}`);
   templateBuffer = Buffer.alloc(0);
 }
 
@@ -105,5 +103,5 @@ export async function generateFlowerCard(
     ctx.fillText(authorSuffix, CARD_WIDTH / 2, startY + lines.length * lineHeight + 12);
   }
 
-  return Buffer.from(canvas.toBuffer('image/png'));
+  return canvas.toBuffer('image/png');
 }
