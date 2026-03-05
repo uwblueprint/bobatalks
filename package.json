@@ -46,6 +46,7 @@
     "typescript-eslint": "^8.46.1"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.95",
     "discord.js": "^14.24.1",
     "dotenv": "^17.2.3",
     "google-auth-library": "^10.5.0",

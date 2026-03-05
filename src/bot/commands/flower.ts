@@ -7,6 +7,7 @@ import {
   ActionRowBuilder,
   ModalSubmitInteraction,
   EmbedBuilder,
+  AttachmentBuilder,
   ModalActionRowComponentBuilder,
   MessageActionRowComponentBuilder,
   MessageFlags,
@@ -19,6 +20,7 @@ import {
 } from 'discord.js';
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 
+import { generateFlowerCard } from '../flowerCard.js';
 import { saveDiscordImageToDrive } from '../googleDriveImages.js';
 import { createFlower, deleteFlower } from '../googleSheetsService.js';
 import { sendFlowerToModeration } from '../moderationWorkflow.js';
@@ -345,25 +347,34 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
   await processFlowerSubmission(interaction, submissionData);
 }
 
-function createFlowerEmbed(
+async function buildFlowerMessage(
   message: string,
   displayName: string,
   avatarUrl?: string,
   attachmentData?: { url: string; contentType: string; filename: string },
-): EmbedBuilder {
+): Promise<{ embeds: EmbedBuilder[]; files: AttachmentBuilder[] }> {
+  const files: AttachmentBuilder[] = [];
+
+  const cardBuffer = await generateFlowerCard(message, displayName);
+  const cardAttachment = new AttachmentBuilder(cardBuffer, { name: 'flower-card.png' });
+  files.push(cardAttachment);
+
   const embed = new EmbedBuilder()
     .setColor('#FF69B4')
     .setAuthor({
       name: displayName,
       ...(avatarUrl ? { iconURL: avatarUrl } : {}),
     })
-    .setDescription(message);
+    .setImage('attachment://flower-card.png');
 
   if (attachmentData) {
-    embed.setImage(attachmentData.url);
+    const userImageAttachment = new AttachmentBuilder(attachmentData.url, {
+      name: 'user-image.png',
+    });
+    files.push(userImageAttachment);
   }
 
-  return embed;
+  return { embeds: [embed], files };
 }
 
 function createResponseMessage(hasConsent: boolean, imageUploadFailed?: boolean): string {
@@ -481,7 +492,12 @@ async function processFlowerSubmission(
         }
       : attachmentData;
 
-    const embed = createFlowerEmbed(message, displayName, avatarUrl, embedAttachmentData);
+    const flowerMessage = await buildFlowerMessage(
+      message,
+      displayName,
+      avatarUrl,
+      embedAttachmentData,
+    );
 
     // Detect image upload failure if attachment present but no drive URL
     const imageUploadFailed = !!(attachmentData && !driveImageUrl);
@@ -505,7 +521,10 @@ async function processFlowerSubmission(
       // Post the flower to the channel
       let publicMessageUrl: string | undefined;
       if (interaction.channel && 'send' in interaction.channel) {
-        const publicMessage = await interaction.channel.send({ embeds: [embed] });
+        const publicMessage = await interaction.channel.send({
+          embeds: flowerMessage.embeds,
+          files: flowerMessage.files,
+        });
         publicMessageUrl = publicMessage.url;
 
         // Auto-react with a flower emoji
