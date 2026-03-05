@@ -12,7 +12,7 @@ const MIN_FONT_SIZE = 16;
 const LINE_HEIGHT_RATIO = 1.45;
 
 // Resolve from project root so it works both in dev (tsx) and production (dist/)
-const templatePath = join(process.cwd(), 'src', 'bot', 'assets', 'flower-template.svg');
+const templatePath = join(process.cwd(), 'src', 'bot', 'assets', 'flower-template.png');
 let templateBuffer: Buffer;
 try {
   templateBuffer = readFileSync(templatePath);
