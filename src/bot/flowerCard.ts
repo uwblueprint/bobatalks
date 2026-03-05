@@ -13,8 +13,16 @@ const LINE_HEIGHT_RATIO = 1.45;
 const FONT_FAMILY = 'Inter';
 
 const assetsDir = join(process.cwd(), 'src', 'bot', 'assets');
-GlobalFonts.registerFromPath(join(assetsDir, 'Inter-Regular.ttf'), FONT_FAMILY);
-GlobalFonts.registerFromPath(join(assetsDir, 'Inter-Italic.ttf'), `${FONT_FAMILY}Italic`);
+// #region agent log
+const regRegular = GlobalFonts.registerFromPath(join(assetsDir, 'Inter-Regular.ttf'), FONT_FAMILY);
+const regItalic = GlobalFonts.registerFromPath(
+  join(assetsDir, 'Inter-Italic.ttf'),
+  `${FONT_FAMILY}Italic`,
+);
+console.log(
+  `[debug-b7d57b] Font registration: regular=${regRegular}, italic=${regItalic}, families=${GlobalFonts.families.map((f: { family: string }) => f.family).join(',')}`,
+);
+// #endregion
 
 const templatePath = join(assetsDir, 'flower-template.png');
 let templateBuffer: Buffer;
@@ -63,6 +71,12 @@ export async function generateFlowerCard(
   const bg = await loadImage(templateBuffer);
   ctx.drawImage(bg, 0, 0, CARD_WIDTH, CARD_HEIGHT);
 
+  // #region agent log
+  console.log(
+    `[debug-b7d57b] generateFlowerCard called: message="${message.slice(0, 50)}", displayName="${displayName}"`,
+  );
+  // #endregion
+
   const textColor = '#4a3252';
   const authorSuffix = displayName !== 'Anonymous' ? `— ${displayName}` : '';
   const authorLineHeight = authorSuffix ? 35 : 0;
@@ -97,6 +111,12 @@ export async function generateFlowerCard(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+
+  // #region agent log
+  console.log(
+    `[debug-b7d57b] Rendering: font="${ctx.font}", color="${ctx.fillStyle}", lines=${lines.length}, fontSize=${fontSize}, startY=${startY}`,
+  );
+  // #endregion
 
   for (let i = 0; i < lines.length; i++) {
     ctx.fillText(lines[i], CARD_WIDTH / 2, startY + i * lineHeight);
