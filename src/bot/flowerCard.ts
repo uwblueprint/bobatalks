@@ -1,11 +1,7 @@
 import { readFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const CARD_WIDTH = 800;
 const CARD_HEIGHT = 400;
@@ -15,8 +11,17 @@ const MAX_FONT_SIZE = 24;
 const MIN_FONT_SIZE = 16;
 const LINE_HEIGHT_RATIO = 1.45;
 
-const templatePath = join(__dirname, 'assets', 'flower-template.svg');
-const templateBuffer = readFileSync(templatePath);
+// Resolve from project root so it works both in dev (tsx) and production (dist/)
+const templatePath = join(process.cwd(), 'src', 'bot', 'assets', 'flower-template.svg');
+let templateBuffer: Buffer;
+try {
+  templateBuffer = readFileSync(templatePath);
+} catch {
+  console.warn(
+    `Flower template not found at ${templatePath} — card generation will be unavailable`,
+  );
+  templateBuffer = Buffer.alloc(0);
+}
 
 function wrapText(
   ctx: ReturnType<ReturnType<typeof createCanvas>['getContext']>,
@@ -44,7 +49,12 @@ function wrapText(
  * Finds the largest font size (between MIN and MAX) where the message
  * fits within the card's text-safe zone, then renders the card.
  */
-export async function generateFlowerCard(message: string, displayName: string): Promise<Buffer> {
+export async function generateFlowerCard(
+  message: string,
+  displayName: string,
+): Promise<Buffer | null> {
+  if (templateBuffer.length === 0) return null;
+
   const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
   const ctx = canvas.getContext('2d');
 

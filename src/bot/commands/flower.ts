@@ -355,23 +355,26 @@ async function buildFlowerMessage(
 ): Promise<{ embeds: EmbedBuilder[]; files: AttachmentBuilder[] }> {
   const files: AttachmentBuilder[] = [];
 
-  const cardBuffer = await generateFlowerCard(message, displayName);
-  const cardAttachment = new AttachmentBuilder(cardBuffer, { name: 'flower-card.png' });
-  files.push(cardAttachment);
+  const embed = new EmbedBuilder().setColor('#FF69B4').setAuthor({
+    name: displayName,
+    ...(avatarUrl ? { iconURL: avatarUrl } : {}),
+  });
 
-  const embed = new EmbedBuilder()
-    .setColor('#FF69B4')
-    .setAuthor({
-      name: displayName,
-      ...(avatarUrl ? { iconURL: avatarUrl } : {}),
-    })
-    .setImage('attachment://flower-card.png');
+  try {
+    const cardBuffer = await generateFlowerCard(message, displayName);
+    if (cardBuffer) {
+      files.push(new AttachmentBuilder(cardBuffer, { name: 'flower-card.png' }));
+      embed.setImage('attachment://flower-card.png');
+    } else {
+      embed.setDescription(message);
+    }
+  } catch (error) {
+    console.error('Error generating flower card, falling back to text embed:', error);
+    embed.setDescription(message);
+  }
 
   if (attachmentData) {
-    const userImageAttachment = new AttachmentBuilder(attachmentData.url, {
-      name: 'user-image.png',
-    });
-    files.push(userImageAttachment);
+    files.push(new AttachmentBuilder(attachmentData.url, { name: 'user-image.png' }));
   }
 
   return { embeds: [embed], files };
