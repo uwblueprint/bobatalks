@@ -4,7 +4,10 @@ import { join } from 'path';
 import { GlobalFonts, createCanvas, loadImage } from '@napi-rs/canvas';
 
 const CARD_WIDTH = 800;
-const TEXT_ONLY_HEIGHT = 400;
+const TEMPLATE_HEIGHT = 400;
+const STRIP_HEIGHT = 100;
+const TEXT_VERTICAL_PADDING = 20;
+const MIN_CARD_HEIGHT = 150;
 const PADDING_X = 80;
 const TEXT_AREA_WIDTH = CARD_WIDTH - PADDING_X * 2;
 const MAX_FONT_SIZE = 24;
@@ -91,6 +94,37 @@ function drawCenteredText(ctx: Ctx, lines: string[], fontSize: number, startY: n
   }
 }
 
+function drawBackground(
+  ctx: Ctx,
+  bg: Awaited<ReturnType<typeof loadImage>>,
+  canvasHeight: number,
+): void {
+  const sampleCtx = createCanvas(CARD_WIDTH, TEMPLATE_HEIGHT).getContext('2d');
+  sampleCtx.drawImage(bg, 0, 0, CARD_WIDTH, TEMPLATE_HEIGHT);
+  const midY = TEMPLATE_HEIGHT / 2;
+  const [lr, lg, lb] = sampleCtx.getImageData(0, midY, 1, 1).data;
+  const [rr, rg, rb] = sampleCtx.getImageData(CARD_WIDTH - 1, midY, 1, 1).data;
+
+  const gradient = ctx.createLinearGradient(0, 0, CARD_WIDTH, 0);
+  gradient.addColorStop(0, `rgb(${lr},${lg},${lb})`);
+  gradient.addColorStop(1, `rgb(${rr},${rg},${rb})`);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, CARD_WIDTH, canvasHeight);
+
+  ctx.drawImage(bg, 0, 0, CARD_WIDTH, STRIP_HEIGHT, 0, 0, CARD_WIDTH, STRIP_HEIGHT);
+  ctx.drawImage(
+    bg,
+    0,
+    TEMPLATE_HEIGHT - STRIP_HEIGHT,
+    CARD_WIDTH,
+    STRIP_HEIGHT,
+    0,
+    canvasHeight - STRIP_HEIGHT,
+    CARD_WIDTH,
+    STRIP_HEIGHT,
+  );
+}
+
 async function fetchImageBuffer(url: string): Promise<Buffer | null> {
   try {
     const response = await fetch(url);
@@ -117,12 +151,19 @@ export async function generateFlowerCard(
   const userImg = userImgBuffer ? await loadImage(userImgBuffer).catch(() => null) : null;
 
   if (!userImg) {
-    const canvas = createCanvas(CARD_WIDTH, TEXT_ONLY_HEIGHT);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(bg, 0, 0, CARD_WIDTH, TEXT_ONLY_HEIGHT);
+    const measCtx = createCanvas(CARD_WIDTH, 100).getContext('2d');
+    const { lines, fontSize, lineHeight } = fitText(measCtx, message, TEMPLATE_HEIGHT);
+    const totalTextHeight = lines.length * lineHeight;
+    const cardHeight = Math.max(
+      STRIP_HEIGHT + TEXT_VERTICAL_PADDING + totalTextHeight + TEXT_VERTICAL_PADDING + STRIP_HEIGHT,
+      MIN_CARD_HEIGHT,
+    );
 
-    const { lines, fontSize, lineHeight } = fitText(ctx, message, TEXT_ONLY_HEIGHT - 120);
-    const startY = (TEXT_ONLY_HEIGHT - lines.length * lineHeight) / 2;
+    const canvas = createCanvas(CARD_WIDTH, cardHeight);
+    const ctx = canvas.getContext('2d');
+    drawBackground(ctx, bg, cardHeight);
+
+    const startY = (cardHeight - totalTextHeight) / 2;
     drawCenteredText(ctx, lines, fontSize, startY);
 
     return canvas.toBuffer('image/png');
@@ -145,34 +186,7 @@ export async function generateFlowerCard(
 
   const canvas = createCanvas(CARD_WIDTH, canvasHeight);
   const ctx = canvas.getContext('2d');
-
-  // Sample the template's actual gradient colors for a seamless fill
-  const sampleCtx = createCanvas(CARD_WIDTH, TEXT_ONLY_HEIGHT).getContext('2d');
-  sampleCtx.drawImage(bg, 0, 0, CARD_WIDTH, TEXT_ONLY_HEIGHT);
-  const midY = TEXT_ONLY_HEIGHT / 2;
-  const [lr, lg, lb] = sampleCtx.getImageData(0, midY, 1, 1).data;
-  const [rr, rg, rb] = sampleCtx.getImageData(CARD_WIDTH - 1, midY, 1, 1).data;
-
-  const gradient = ctx.createLinearGradient(0, 0, CARD_WIDTH, 0);
-  gradient.addColorStop(0, `rgb(${lr},${lg},${lb})`);
-  gradient.addColorStop(1, `rgb(${rr},${rg},${rb})`);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, CARD_WIDTH, canvasHeight);
-
-  // Floral decorations at native scale so flowers match the text-only card
-  const STRIP = 110;
-  ctx.drawImage(bg, 0, 0, CARD_WIDTH, STRIP, 0, 0, CARD_WIDTH, STRIP);
-  ctx.drawImage(
-    bg,
-    0,
-    TEXT_ONLY_HEIGHT - STRIP,
-    CARD_WIDTH,
-    STRIP,
-    0,
-    canvasHeight - STRIP,
-    CARD_WIDTH,
-    STRIP,
-  );
+  drawBackground(ctx, bg, canvasHeight);
 
   // User image with rounded corners
   const imgX = (CARD_WIDTH - imgW) / 2;
