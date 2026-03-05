@@ -182,11 +182,11 @@ export async function sendFlowerToModeration(guild: Guild | null, data: Moderati
       return;
     }
 
-    const flowerEmoji = findGuildEmoji(guild, 'flower_strawberry_alice');
     const modmailEmoji = findGuildEmoji(guild, 'modmail_BT') || '📢 ';
 
     const authorName = `${data.serverNickname} (@${data.discordUsername}) || ${data.flowersDisplayName}`;
 
+    const messageLink = `[Message →](${data.messageUrl})`;
     const truncatedContent =
       data.messageContent.length > 1024
         ? data.messageContent.substring(0, 1021) + '...'
@@ -202,12 +202,12 @@ export async function sendFlowerToModeration(guild: Guild | null, data: Moderati
           inline: true,
         },
         {
-          name: `${modmailEmoji}[Message →](${data.messageUrl})`,
-          value: truncatedContent,
+          name: `${modmailEmoji}Message`,
+          value: `${messageLink}\n${truncatedContent}`,
           inline: false,
         },
       )
-      .setFooter({ text: `${flowerEmoji}ID: ${data.flowerId}` })
+      .setFooter({ text: `🌸 ID: ${data.flowerId}` })
       .setTimestamp(data.timestamp || new Date());
 
     if (data.imageUrl) {
@@ -247,24 +247,13 @@ export async function handleModerationApprove(interaction: ButtonInteraction) {
     await updateFlower(flowerId, 'approved', 'true');
 
     const originalEmbed = interaction.message.embeds[0];
-    const guild = interaction.guild;
-    const logoEmoji = guild ? findGuildEmoji(guild, 'logo_BT') || '🌺 ' : '🌺 ';
     const updatedEmbed = EmbedBuilder.from(originalEmbed)
       .setColor('#00FF00')
-      .spliceFields(
-        0,
-        1,
-        {
-          name: '✅ Approved',
-          value: `<t:${Math.floor(Date.now() / 1000)}:F>`,
-          inline: true,
-        },
-        {
-          name: `${logoEmoji}Reviewer`,
-          value: `<@${interaction.user.id}>`,
-          inline: true,
-        },
-      );
+      .spliceFields(0, 1, {
+        name: '✅ Approved',
+        value: `<t:${Math.floor(Date.now() / 1000)}:F> | Reviewed by <@${interaction.user.id}>`,
+        inline: false,
+      });
 
     await interaction.editReply({
       embeds: [updatedEmbed],
@@ -292,24 +281,13 @@ export async function handleModerationDecline(interaction: ButtonInteraction) {
     await updateFlower(flowerId, 'approved', 'false');
 
     const originalEmbed = interaction.message.embeds[0];
-    const guild = interaction.guild;
-    const logoEmoji = guild ? findGuildEmoji(guild, 'logo_BT') || '🌺 ' : '🌺 ';
     const updatedEmbed = EmbedBuilder.from(originalEmbed)
       .setColor('#FF0000')
-      .spliceFields(
-        0,
-        1,
-        {
-          name: '❌ Declined',
-          value: `<t:${Math.floor(Date.now() / 1000)}:F>`,
-          inline: true,
-        },
-        {
-          name: `${logoEmoji}Reviewer`,
-          value: `<@${interaction.user.id}>`,
-          inline: true,
-        },
-      );
+      .spliceFields(0, 1, {
+        name: '❌ Declined',
+        value: `<t:${Math.floor(Date.now() / 1000)}:F> | Reviewed by <@${interaction.user.id}>`,
+        inline: false,
+      });
 
     await interaction.editReply({
       embeds: [updatedEmbed],

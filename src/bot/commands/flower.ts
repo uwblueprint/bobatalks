@@ -79,13 +79,10 @@ async function logFlowerUsageToModChannel(
       return;
     }
 
-    const flowerEmoji = guild.emojis.cache.find((e) => e.name === 'flower_strawberry_alice');
-    const titleEmoji = flowerEmoji ? `${flowerEmoji} ` : '🌸 ';
-
     const logEmbed = new EmbedBuilder()
       .setColor('#FFA500')
       .setAuthor({ name: logData.username })
-      .setTitle(`${titleEmoji}Flower Submitted`)
+      .setTitle('🌸 Flower Submitted')
       .setURL(logData.messageUrl || null)
       .setDescription(
         `By <@${logData.userId}> at <t:${Math.floor(logData.timestamp.getTime() / 1000)}:F>`,
@@ -97,6 +94,7 @@ async function logFlowerUsageToModChannel(
             ? logData.message.substring(0, 1021) + '...'
             : logData.message,
       })
+      .setFooter({ text: `ID: ${logData.flowerId || 'N/A'}` })
       .setTimestamp();
 
     if (logData.imageUrl) {
