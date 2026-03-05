@@ -361,7 +361,7 @@ async function buildFlowerMessage(
   });
 
   try {
-    const cardBuffer = await generateFlowerCard(message);
+    const cardBuffer = await generateFlowerCard(message, attachmentData?.url);
     if (cardBuffer) {
       files.push(new AttachmentBuilder(cardBuffer, { name: 'flower-card.png' }));
       embed.setImage('attachment://flower-card.png');
@@ -371,10 +371,6 @@ async function buildFlowerMessage(
   } catch (error) {
     console.error('Error generating flower card:', error);
     embed.setDescription(message);
-  }
-
-  if (attachmentData) {
-    files.push(new AttachmentBuilder(attachmentData.url, { name: 'user-image.png' }));
   }
 
   return { embeds: [embed], files };
