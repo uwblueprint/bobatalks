@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { GlobalFonts, createCanvas, loadImage } from '@napi-rs/canvas';
 
 const CARD_WIDTH = 800;
 const CARD_HEIGHT = 400;
@@ -10,9 +10,13 @@ const TEXT_AREA_WIDTH = CARD_WIDTH - PADDING_X * 2;
 const MAX_FONT_SIZE = 24;
 const MIN_FONT_SIZE = 16;
 const LINE_HEIGHT_RATIO = 1.45;
+const FONT_FAMILY = 'Inter';
 
-// Resolve from project root so it works both in dev (tsx) and production (dist/)
-const templatePath = join(process.cwd(), 'src', 'bot', 'assets', 'flower-template.png');
+const assetsDir = join(process.cwd(), 'src', 'bot', 'assets');
+GlobalFonts.registerFromPath(join(assetsDir, 'Inter-Regular.ttf'), FONT_FAMILY);
+GlobalFonts.registerFromPath(join(assetsDir, 'Inter-Italic.ttf'), `${FONT_FAMILY}Italic`);
+
+const templatePath = join(assetsDir, 'flower-template.png');
 let templateBuffer: Buffer;
 try {
   templateBuffer = readFileSync(templatePath);
@@ -70,7 +74,7 @@ export async function generateFlowerCard(
 
   // Step down font size until the message fits vertically
   while (fontSize >= MIN_FONT_SIZE) {
-    ctx.font = `${fontSize}px sans-serif`;
+    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
     lines = wrapText(ctx, message, TEXT_AREA_WIDTH);
     lineHeight = fontSize * LINE_HEIGHT_RATIO;
     if (lines.length * lineHeight <= maxTextHeight) break;
@@ -92,14 +96,14 @@ export async function generateFlowerCard(
   ctx.fillStyle = textColor;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.font = `${fontSize}px sans-serif`;
+  ctx.font = `${fontSize}px ${FONT_FAMILY}`;
 
   for (let i = 0; i < lines.length; i++) {
     ctx.fillText(lines[i], CARD_WIDTH / 2, startY + i * lineHeight);
   }
 
   if (authorSuffix) {
-    ctx.font = `italic ${fontSize - 2}px sans-serif`;
+    ctx.font = `italic ${fontSize - 2}px ${FONT_FAMILY}Italic, ${FONT_FAMILY}`;
     ctx.fillText(authorSuffix, CARD_WIDTH / 2, startY + lines.length * lineHeight + 12);
   }
 
