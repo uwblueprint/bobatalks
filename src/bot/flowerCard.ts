@@ -13,16 +13,7 @@ const LINE_HEIGHT_RATIO = 1.45;
 const FONT_FAMILY = 'Inter';
 
 const assetsDir = join(process.cwd(), 'src', 'bot', 'assets');
-// #region agent log
-const regRegular = GlobalFonts.registerFromPath(join(assetsDir, 'Inter-Regular.ttf'), FONT_FAMILY);
-const regItalic = GlobalFonts.registerFromPath(
-  join(assetsDir, 'Inter-Italic.ttf'),
-  `${FONT_FAMILY}Italic`,
-);
-console.log(
-  `[debug-b7d57b] Font registration: regular=${regRegular}, italic=${regItalic}, families=${GlobalFonts.families.map((f: { family: string }) => f.family).join(',')}`,
-);
-// #endregion
+GlobalFonts.registerFromPath(join(assetsDir, 'Inter-Regular.ttf'), FONT_FAMILY);
 
 const templatePath = join(assetsDir, 'flower-template.png');
 let templateBuffer: Buffer;
@@ -59,10 +50,7 @@ function wrapText(
  * Finds the largest font size (between MIN and MAX) where the message
  * fits within the card's text-safe zone, then renders the card.
  */
-export async function generateFlowerCard(
-  message: string,
-  displayName: string,
-): Promise<Buffer | null> {
+export async function generateFlowerCard(message: string): Promise<Buffer | null> {
   if (templateBuffer.length === 0) return null;
 
   const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
@@ -71,16 +59,8 @@ export async function generateFlowerCard(
   const bg = await loadImage(templateBuffer);
   ctx.drawImage(bg, 0, 0, CARD_WIDTH, CARD_HEIGHT);
 
-  // #region agent log
-  console.log(
-    `[debug-b7d57b] generateFlowerCard called: message="${message.slice(0, 50)}", displayName="${displayName}"`,
-  );
-  // #endregion
-
   const textColor = '#4a3252';
-  const authorSuffix = displayName !== 'Anonymous' ? `— ${displayName}` : '';
-  const authorLineHeight = authorSuffix ? 35 : 0;
-  const maxTextHeight = CARD_HEIGHT - 120 - authorLineHeight;
+  const maxTextHeight = CARD_HEIGHT - 120;
 
   let fontSize = MAX_FONT_SIZE;
   let lines: string[] = [];
@@ -104,7 +84,7 @@ export async function generateFlowerCard(
     lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S*$/, '…');
   }
 
-  const totalHeight = lines.length * lineHeight + authorLineHeight;
+  const totalHeight = lines.length * lineHeight;
   const startY = (CARD_HEIGHT - totalHeight) / 2;
 
   ctx.fillStyle = textColor;
@@ -112,19 +92,8 @@ export async function generateFlowerCard(
   ctx.textBaseline = 'top';
   ctx.font = `${fontSize}px ${FONT_FAMILY}`;
 
-  // #region agent log
-  console.log(
-    `[debug-b7d57b] Rendering: font="${ctx.font}", color="${ctx.fillStyle}", lines=${lines.length}, fontSize=${fontSize}, startY=${startY}`,
-  );
-  // #endregion
-
   for (let i = 0; i < lines.length; i++) {
     ctx.fillText(lines[i], CARD_WIDTH / 2, startY + i * lineHeight);
-  }
-
-  if (authorSuffix) {
-    ctx.font = `italic ${fontSize - 2}px ${FONT_FAMILY}Italic, ${FONT_FAMILY}`;
-    ctx.fillText(authorSuffix, CARD_WIDTH / 2, startY + lines.length * lineHeight + 12);
   }
 
   return canvas.toBuffer('image/png');

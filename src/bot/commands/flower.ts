@@ -361,7 +361,7 @@ async function buildFlowerMessage(
   });
 
   try {
-    const cardBuffer = await generateFlowerCard(message, displayName);
+    const cardBuffer = await generateFlowerCard(message);
     if (cardBuffer) {
       files.push(new AttachmentBuilder(cardBuffer, { name: 'flower-card.png' }));
       embed.setImage('attachment://flower-card.png');
