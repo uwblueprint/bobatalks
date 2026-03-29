@@ -109,3 +109,4 @@ jobs:
               pm2 start pm2.config.cjs --only bobatalks
             fi
             pm2 save
+            node dist/bot/registerCommands.js
