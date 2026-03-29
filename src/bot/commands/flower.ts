@@ -62,13 +62,79 @@ function normalizeEmojiShortcodesToDiscordTokens(text: string, guild: Guild | nu
 }
 
 /**
- * Replaces all bare @tokens in message with the canonical mention,
- * or appends it in parentheses if no @token is found.
+ * Replaces @tokens that fuzzily match the selected user aliases.
+ * If no @token exists, appends the canonical mention in parentheses.
  */
-function injectMentionIntoMessage(text: string, mentionUserId: string): string {
-  const AT_TOKEN_PATTERN = /(^|[\s(])@[a-zA-Z0-9_.-]+/g;
-  const replaced = text.replace(AT_TOKEN_PATTERN, (_, prefix) => `${prefix}<@${mentionUserId}>`);
-  return replaced === text ? `${text} (<@${mentionUserId}>)` : replaced;
+function injectMentionIntoMessage(
+  text: string,
+  mentionUserId: string,
+  mentionAliases: string[],
+): string {
+  const AT_TOKEN_PATTERN = /(^|[\s(])@([a-zA-Z0-9_.-]{2,32})/g;
+  const normalizeAliasForComparison = (value: string): string =>
+    value
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '');
+
+  const computeLevenshteinDistance = (left: string, right: string): number => {
+    const row = new Array(right.length + 1).fill(0);
+    for (let columnIndex = 0; columnIndex <= right.length; columnIndex += 1) {
+      row[columnIndex] = columnIndex;
+    }
+
+    for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+      let diagonal = row[0];
+      row[0] = leftIndex;
+
+      for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+        const upper = row[rightIndex];
+        const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+        row[rightIndex] = Math.min(
+          row[rightIndex] + 1,
+          row[rightIndex - 1] + 1,
+          diagonal + substitutionCost,
+        );
+        diagonal = upper;
+      }
+    }
+
+    return row[right.length];
+  };
+
+  const normalizedAliases = mentionAliases
+    .map(normalizeAliasForComparison)
+    .filter((alias) => alias.length >= 2);
+
+  const isLikelySelectedUserMention = (rawToken: string): boolean => {
+    const normalizedToken = normalizeAliasForComparison(rawToken);
+    if (!normalizedToken) return false;
+
+    return normalizedAliases.some((alias) => {
+      if (normalizedToken === alias) return true;
+      if (normalizedToken.length >= 4 && alias.length >= 4) {
+        if (normalizedToken.startsWith(alias) || alias.startsWith(normalizedToken)) return true;
+      }
+
+      const lengthDifference = Math.abs(normalizedToken.length - alias.length);
+      if (lengthDifference > 2) return false;
+
+      const maxAllowedDistance = Math.max(1, Math.floor(Math.max(alias.length, 4) / 5));
+      const editDistance = computeLevenshteinDistance(normalizedToken, alias);
+      return editDistance <= maxAllowedDistance;
+    });
+  };
+
+  let sawAtToken = false;
+  const replaced = text.replace(AT_TOKEN_PATTERN, (_, prefix: string, token: string) => {
+    sawAtToken = true;
+    return isLikelySelectedUserMention(token)
+      ? `${prefix}<@${mentionUserId}>`
+      : `${prefix}@${token}`;
+  });
+
+  return sawAtToken ? replaced : `${text} (<@${mentionUserId}>)`;
 }
 
 function normalizeFlowerInputForDiscord(text: string, guild: Guild | null): string {
@@ -146,6 +212,7 @@ const pendingSubmissions = new Map<
     name: string;
     username: string;
     mentionUserId?: string;
+    mentionAliases?: string[];
     hasConsent?: boolean;
     shareDiscordUsername?: boolean;
   }
@@ -154,6 +221,18 @@ const pendingSubmissions = new Map<
 export async function flowerCommand(interaction: ChatInputCommandInteraction) {
   const attachment = interaction.options.getAttachment('image');
   const mentionUser = interaction.options.getUser('mention_user');
+  const mentionMember = mentionUser
+    ? ((interaction.guild?.members.cache.get(mentionUser.id) as GuildMember | undefined) ?? null)
+    : null;
+  const mentionAliases = mentionUser
+    ? [
+        ...new Set(
+          [mentionUser.username, mentionUser.globalName, mentionMember?.displayName].filter(
+            (alias): alias is string => Boolean(alias),
+          ),
+        ),
+      ]
+    : [];
 
   // Validate attachment is an image if provided
   if (attachment) {
@@ -176,6 +255,7 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
       name: '',
       username: interaction.user.username,
       ...(mentionUser ? { mentionUserId: mentionUser.id } : {}),
+      ...(mentionAliases.length > 0 ? { mentionAliases } : {}),
     });
   } else {
     pendingSubmissions.set(interaction.user.id, {
@@ -183,6 +263,7 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
       name: '',
       username: interaction.user.username,
       ...(mentionUser ? { mentionUserId: mentionUser.id } : {}),
+      ...(mentionAliases.length > 0 ? { mentionAliases } : {}),
     });
   }
 
@@ -415,9 +496,19 @@ async function buildFlowerMessage(
   return { embeds: [embed], files };
 }
 
-function createResponseMessage(hasConsent: boolean, imageUploadFailed?: boolean): string {
+function createResponseMessage(
+  hasConsent: boolean,
+  mentionUserId?: string,
+  imageUploadFailed?: boolean,
+): string {
   let message =
     '✅ Your flower has been submitted! Thank you for sharing and celebrating with the community! 🌸';
+
+  if (mentionUserId) {
+    message += `\n\n✅ Mention will notify <@${mentionUserId}>.`;
+  } else {
+    message += '\n\nℹ️ No mention selected';
+  }
 
   if (imageUploadFailed) {
     message +=
@@ -449,6 +540,7 @@ async function processFlowerSubmission(
     name: string;
     username: string;
     mentionUserId?: string;
+    mentionAliases?: string[];
     hasConsent?: boolean;
     shareDiscordUsername?: boolean;
   },
@@ -459,13 +551,14 @@ async function processFlowerSubmission(
     name: originalNameInput,
     username,
     mentionUserId,
+    mentionAliases = [],
     hasConsent = false,
     shareDiscordUsername = false,
   } = submissionData;
 
   const emojiNormalizedMessage = normalizeFlowerInputForDiscord(originalMessage, interaction.guild);
   const normalizedMessage = mentionUserId
-    ? injectMentionIntoMessage(emojiNormalizedMessage, mentionUserId)
+    ? injectMentionIntoMessage(emojiNormalizedMessage, mentionUserId, mentionAliases)
     : emojiNormalizedMessage;
 
   const normalizedNameInput = normalizeFlowerInputForDiscord(originalNameInput, interaction.guild);
@@ -549,7 +642,7 @@ async function processFlowerSubmission(
     // Detect image upload failure if attachment present but no drive URL
     const imageUploadFailed = !!(attachmentData && !driveImageUrl);
 
-    const responseMessage = createResponseMessage(hasConsent, imageUploadFailed);
+    const responseMessage = createResponseMessage(hasConsent, mentionUserId, imageUploadFailed);
 
     try {
       // Use editReply if interaction was deferred, otherwise use update
