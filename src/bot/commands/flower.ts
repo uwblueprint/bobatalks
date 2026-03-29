@@ -39,10 +39,7 @@ export const flower = new SlashCommandBuilder()
       .setRequired(false),
   )
   .addAttachmentOption((option) =>
-    option
-      .setName('image')
-      .setDescription('Upload an image (PNG, JPEG, etc.) - optional')
-      .setRequired(false),
+    option.setName('image').setDescription('Upload an image (PNG, JPEG, etc.)').setRequired(false),
   );
 
 // Content filter using obscenity library
