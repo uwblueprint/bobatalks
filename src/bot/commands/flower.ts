@@ -30,6 +30,14 @@ export const flower = new SlashCommandBuilder()
   .setDescription(
     'Submit a flower 💐 - a message of acknowledgement, congratulations, or encouragement',
   )
+  .addUserOption((option) =>
+    option
+      .setName('mention_user')
+      .setDescription(
+        'Who is this flower for? (optional — use @username in your message for placement)',
+      )
+      .setRequired(false),
+  )
   .addAttachmentOption((option) =>
     option
       .setName('image')
@@ -45,6 +53,29 @@ const matcher = new RegExpMatcher({
 
 function containsInappropriateContent(text: string): boolean {
   return matcher.hasMatch(text);
+}
+
+function normalizeEmojiShortcodesToDiscordTokens(text: string, guild: Guild | null): string {
+  if (!guild) return text;
+
+  return text.replace(/:([a-zA-Z0-9_]{2,32}):/g, (fullMatch, emojiName) => {
+    const guildEmoji = guild.emojis.cache.find((emoji) => emoji.name === emojiName);
+    return guildEmoji ? guildEmoji.toString() : fullMatch;
+  });
+}
+
+/**
+ * Replaces all bare @tokens in message with the canonical mention,
+ * or appends it in parentheses if no @token is found.
+ */
+function injectMentionIntoMessage(text: string, mentionUserId: string): string {
+  const AT_TOKEN_PATTERN = /(^|[\s(])@[a-zA-Z0-9_.-]+/g;
+  const replaced = text.replace(AT_TOKEN_PATTERN, (_, prefix) => `${prefix}<@${mentionUserId}>`);
+  return replaced === text ? `${text} (<@${mentionUserId}>)` : replaced;
+}
+
+function normalizeFlowerInputForDiscord(text: string, guild: Guild | null): string {
+  return normalizeEmojiShortcodesToDiscordTokens(text, guild);
 }
 
 /**
@@ -117,14 +148,15 @@ const pendingSubmissions = new Map<
     message: string;
     name: string;
     username: string;
+    mentionUserId?: string;
     hasConsent?: boolean;
     shareDiscordUsername?: boolean;
   }
 >();
 
 export async function flowerCommand(interaction: ChatInputCommandInteraction) {
-  // Get the attachment if provided
   const attachment = interaction.options.getAttachment('image');
+  const mentionUser = interaction.options.getUser('mention_user');
 
   // Validate attachment is an image if provided
   if (attachment) {
@@ -137,7 +169,6 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
       return;
     }
 
-    // Store attachment data for later use in modal submit
     pendingSubmissions.set(interaction.user.id, {
       attachment: {
         url: attachment.url,
@@ -147,13 +178,14 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
       message: '',
       name: '',
       username: interaction.user.username,
+      ...(mentionUser ? { mentionUserId: mentionUser.id } : {}),
     });
   } else {
-    // Initialize with no attachment
     pendingSubmissions.set(interaction.user.id, {
       message: '',
       name: '',
       username: interaction.user.username,
+      ...(mentionUser ? { mentionUserId: mentionUser.id } : {}),
     });
   }
 
@@ -419,18 +451,27 @@ async function processFlowerSubmission(
     message: string;
     name: string;
     username: string;
+    mentionUserId?: string;
     hasConsent?: boolean;
     shareDiscordUsername?: boolean;
   },
 ) {
   const {
     attachment: attachmentData,
-    message,
-    name: nameInput,
+    message: originalMessage,
+    name: originalNameInput,
     username,
+    mentionUserId,
     hasConsent = false,
     shareDiscordUsername = false,
   } = submissionData;
+
+  const emojiNormalizedMessage = normalizeFlowerInputForDiscord(originalMessage, interaction.guild);
+  const normalizedMessage = mentionUserId
+    ? injectMentionIntoMessage(emojiNormalizedMessage, mentionUserId)
+    : emojiNormalizedMessage;
+
+  const normalizedNameInput = normalizeFlowerInputForDiscord(originalNameInput, interaction.guild);
 
   let createdFlowerId: string | undefined;
   let driveImageUrl: string | undefined;
@@ -461,9 +502,9 @@ async function processFlowerSubmission(
 
     // Create flower entry in Google Sheets with drive link
     const createdFlower = await createFlower({
-      name: nameInput || undefined,
+      name: normalizedNameInput || undefined,
       username: shareDiscordUsername ? username : undefined,
-      message: message,
+      message: normalizedMessage,
       picture: driveImageUrl,
       website: hasConsent,
     });
@@ -473,7 +514,7 @@ async function processFlowerSubmission(
     // Determine display name based on name field and Discord username sharing preference
     let displayName: string;
     let avatarUrl: string | undefined;
-    const nameIsEmpty = !nameInput || nameInput.trim() === '';
+    const nameIsEmpty = !normalizedNameInput || normalizedNameInput.trim() === '';
 
     if (nameIsEmpty) {
       if (shareDiscordUsername) {
@@ -485,7 +526,7 @@ async function processFlowerSubmission(
         avatarUrl = undefined;
       }
     } else {
-      displayName = nameInput.trim();
+      displayName = normalizedNameInput.trim();
       avatarUrl = interaction.user.displayAvatarURL();
     }
 
@@ -502,7 +543,7 @@ async function processFlowerSubmission(
       : attachmentData;
 
     const flowerMessage = await buildFlowerMessage(
-      message,
+      normalizedMessage,
       displayName,
       avatarUrl,
       embedAttachmentData,
@@ -533,6 +574,7 @@ async function processFlowerSubmission(
         const publicMessage = await interaction.channel.send({
           embeds: flowerMessage.embeds,
           files: flowerMessage.files,
+          allowedMentions: { parse: ['users'] },
         });
         publicMessageUrl = publicMessage.url;
 
@@ -561,11 +603,11 @@ async function processFlowerSubmission(
         username: interaction.user.username,
         userId: interaction.user.id,
         timestamp: new Date(),
-        message: message,
+        message: normalizedMessage,
       };
 
-      if (nameInput && nameInput.trim() !== '') {
-        logData.nameProvided = nameInput.trim();
+      if (normalizedNameInput && normalizedNameInput.trim() !== '') {
+        logData.nameProvided = normalizedNameInput.trim();
       }
       if (createdFlowerId) {
         logData.flowerId = createdFlowerId;
@@ -585,7 +627,7 @@ async function processFlowerSubmission(
         await sendFlowerToModeration(interaction.guild, {
           flowerId: createdFlowerId,
           messageUrl: publicMessageUrl,
-          messageContent: message,
+          messageContent: normalizedMessage,
           flowersDisplayName: displayName,
           discordUsername: interaction.user.username,
           userId: interaction.user.id,
