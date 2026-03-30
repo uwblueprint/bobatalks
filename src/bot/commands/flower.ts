@@ -309,6 +309,13 @@ function buildFlowerModal(
   return modal;
 }
 
+function resolveDisplayNameForPreview(submissionData: PendingFlowerSubmission): string {
+  const customName = submissionData.name?.trim();
+  if (customName) return `"${customName}" (custom name)`;
+  if (submissionData.shareDiscordUsername) return `${submissionData.username} (Discord username)`;
+  return 'Anonymous';
+}
+
 function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild: Guild | null) {
   const emojiNormalizedMessage = normalizeFlowerInputForDiscord(submissionData.message, guild);
   const hasAtToken = /(^|[\s(])@[a-zA-Z0-9_.-]{2,32}/.test(emojiNormalizedMessage);
@@ -338,11 +345,13 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
   const imagePreview = submissionData.attachment
     ? `🖼️ Image attached: ${submissionData.attachment.filename}`
     : 'ℹ️ No image attached';
+  const authorPreview = `👤 Posted as: ${resolveDisplayNameForPreview(submissionData)}`;
 
   return {
     content: [
       '🧾 Final preview before posting:',
       '',
+      authorPreview,
       mentionPreview,
       websitePreview,
       imagePreview,
@@ -458,11 +467,15 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
     return;
   }
 
+  const previousNameWasEmpty = !submissionData.name || submissionData.name.trim() === '';
+  const newNameIsEmpty = !nameInput || nameInput.trim() === '';
+  const nameStatusChanged = previousNameWasEmpty !== newNameIsEmpty;
+
   // Update submission data with message and name
   submissionData.message = message;
   submissionData.name = nameInput;
 
-  if (isEditSubmission && submissionData.hasConsent !== undefined) {
+  if (isEditSubmission && submissionData.hasConsent !== undefined && !nameStatusChanged) {
     const previewPayload = buildFinalPreviewPayload(submissionData, interaction.guild);
     await interaction.reply({
       ...previewPayload,
@@ -471,9 +484,17 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
     return;
   }
 
+  // Name status changed on edit — clear stale consent/username state and re-ask
+  if (isEditSubmission && nameStatusChanged) {
+    delete submissionData.hasConsent;
+    delete submissionData.shareDiscordUsername;
+  }
+
   // Reply to modal submission
   await interaction.reply({
-    content: '✅ Thank you for your submission! Please answer the question below.',
+    content: isEditSubmission
+      ? '✅ Got it! Please re-answer the question below since your name changed.'
+      : '✅ Thank you for your submission! Please answer the question below.',
     flags: MessageFlags.Ephemeral,
   });
 
