@@ -342,15 +342,12 @@ function buildFinalPreviewPayload(
 
   const mentionHint = submissionData.mentionUserId
     ? mentionResolution?.appendedMention && hasAtToken
-      ? "Your @token didn't match the selected user — ping appended at the end. Click Edit to adjust."
+      ? "Your @name didn't match the selected user — ping appended at the end. Click Edit to adjust."
       : null
     : hasAtToken
-      ? 'Your @text will appear as plain text. Select mention_user when running /flower to send a real ping.'
+      ? 'Your @name will appear as plain text. Select mention_user when running /flower to send a real ping.'
       : null;
-  const imageHint = !submissionData.attachment
-    ? 'No image attached. Cancel and rerun /flower with an image if you want one.'
-    : null;
-  const hints = [...(mentionHint ? [mentionHint] : []), ...(imageHint ? [imageHint] : [])];
+  const hints = [...(mentionHint ? [mentionHint] : [])];
 
   const displayName = resolveDisplayNameForPreview(submissionData);
   const previewEmbed = new EmbedBuilder().setColor('#FF69B4').setAuthor({
