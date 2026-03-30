@@ -335,6 +335,9 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
   const websitePreview = submissionData.hasConsent
     ? '✅ Website consent: Yes'
     : 'ℹ️ Website consent: No';
+  const imagePreview = submissionData.attachment
+    ? `🖼️ Image attached: ${submissionData.attachment.filename}`
+    : 'ℹ️ No image attached';
 
   return {
     content: [
@@ -342,6 +345,7 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
       '',
       mentionPreview,
       websitePreview,
+      imagePreview,
       ...(mentionHint ? ['', `💡 ${mentionHint}`] : []),
       '',
       `📢 Message preview:\n${previewSnippet}`,
