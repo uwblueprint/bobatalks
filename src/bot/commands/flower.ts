@@ -494,32 +494,23 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
   submissionData.message = message;
   submissionData.name = nameInput;
 
-  if (isEditSubmission && submissionData.hasConsent !== undefined && !nameStatusChanged) {
+  if (isEditSubmission) {
+    // Delete previous preview if it exists
     const previousPreviewInteraction = submissionData.lastPreviewInteraction;
-    const previewPayload = buildFinalPreviewPayload(
-      submissionData,
-      interaction.guild,
-      interaction.user.displayAvatarURL(),
-    );
-    await interaction.reply({
-      ...previewPayload,
-      flags: MessageFlags.Ephemeral,
-    });
-    submissionData.lastPreviewInteraction = interaction;
     if (previousPreviewInteraction) {
       try {
         await previousPreviewInteraction.deleteReply();
       } catch {
-        // Previous reply may have already been dismissed or expired — safe to ignore
+        // Previous reply may have already been dismissed or expired
       }
+      delete submissionData.lastPreviewInteraction;
     }
-    return;
-  }
 
-  // Name status changed on edit — clear stale consent/username state and re-ask
-  if (isEditSubmission && nameStatusChanged) {
+    // Always re-ask consent; only re-ask username share if name status changed
     delete submissionData.hasConsent;
-    delete submissionData.shareDiscordUsername;
+    if (nameStatusChanged) {
+      delete submissionData.shareDiscordUsername;
+    }
   }
 
   const consentButtons = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
