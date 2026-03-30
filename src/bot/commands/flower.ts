@@ -204,19 +204,109 @@ async function logFlowerUsageToModChannel(
 }
 
 // Temporary storage for image attachments and submission data (userId -> data)
-const pendingSubmissions = new Map<
-  string,
-  {
-    attachment?: { url: string; contentType: string; filename: string };
-    message: string;
-    name: string;
-    username: string;
-    mentionUserId?: string;
-    mentionAliases?: string[];
-    hasConsent?: boolean;
-    shareDiscordUsername?: boolean;
+type PendingFlowerSubmission = {
+  attachment?: { url: string; contentType: string; filename: string };
+  message: string;
+  name: string;
+  username: string;
+  mentionUserId?: string;
+  mentionAliases?: string[];
+  hasConsent?: boolean;
+  shareDiscordUsername?: boolean;
+};
+
+const pendingSubmissions = new Map<string, PendingFlowerSubmission>();
+
+function buildFlowerModal(
+  messageValue = '',
+  nameValue = '',
+  customId = 'flowerModal',
+): ModalBuilder {
+  const modal = new ModalBuilder().setCustomId(customId).setTitle('Submit Flowers 💐');
+
+  const messageInput = new TextInputBuilder()
+    .setCustomId('flowerMessage')
+    .setLabel('Your Message')
+    .setStyle(TextInputStyle.Paragraph)
+    .setPlaceholder(
+      'Example: "I finally landed my first internship!" or "Shoutout to Eileen for being so supportive!"',
+    )
+    .setRequired(true)
+    .setMaxLength(1000)
+    .setMinLength(10);
+
+  if (messageValue) {
+    messageInput.setValue(messageValue);
   }
->();
+
+  const nameInput = new TextInputBuilder()
+    .setCustomId('flowerName')
+    .setLabel('Your Name (Optional)')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('e.g. John Doe')
+    .setRequired(false)
+    .setMaxLength(100);
+
+  if (nameValue) {
+    nameInput.setValue(nameValue);
+  }
+
+  const messageRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+    messageInput,
+  );
+  const nameRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(nameInput);
+
+  modal.addComponents(messageRow, nameRow);
+  return modal;
+}
+
+function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild: Guild | null) {
+  const emojiNormalizedMessage = normalizeFlowerInputForDiscord(submissionData.message, guild);
+  const previewMessage = submissionData.mentionUserId
+    ? injectMentionIntoMessage(
+        emojiNormalizedMessage,
+        submissionData.mentionUserId,
+        submissionData.mentionAliases ?? [],
+      )
+    : emojiNormalizedMessage;
+  const previewSnippet =
+    previewMessage.length > 350 ? `${previewMessage.slice(0, 347)}...` : previewMessage;
+  const mentionPreview = submissionData.mentionUserId
+    ? `✅ Mention will notify <@${submissionData.mentionUserId}> when you confirm.`
+    : 'ℹ️ No mention selected; @name stays plain text.';
+  const websitePreview = submissionData.hasConsent
+    ? '✅ Website consent: Yes'
+    : 'ℹ️ Website consent: No';
+
+  return {
+    content: [
+      '🧾 Final preview before posting:',
+      '',
+      mentionPreview,
+      websitePreview,
+      '',
+      `📢 Message preview:\n${previewSnippet}`,
+      '',
+      'Post this flower now?',
+    ].join('\n'),
+    components: [
+      new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId('flowerSubmit_confirm')
+          .setLabel('Confirm & Post')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId('flowerSubmit_edit')
+          .setLabel('Edit')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId('flowerSubmit_cancel')
+          .setLabel('Cancel')
+          .setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
 
 export async function flowerCommand(interaction: ChatInputCommandInteraction) {
   const attachment = interaction.options.getAttachment('image');
@@ -267,46 +357,13 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
     });
   }
 
-  // Create modal form
-  const modal = new ModalBuilder().setCustomId('flowerModal').setTitle('Submit Flowers 💐');
-
-  // Message input (required)
-  const messageInput = new TextInputBuilder()
-    .setCustomId('flowerMessage')
-    .setLabel('Your Message')
-    .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder(
-      'Example: "I finally landed my first internship!" or "Shoutout to Eileen for being so supportive!"',
-    )
-    .setRequired(true)
-    .setMaxLength(1000)
-    .setMinLength(10);
-
-  // Name input (optional)
-  const nameInput = new TextInputBuilder()
-    .setCustomId('flowerName')
-    .setLabel('Your Name (Optional)')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('e.g. John Doe')
-    .setRequired(false)
-    .setMaxLength(100);
-
-  // Add inputs to modal
-  const messageRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
-    messageInput,
-  );
-  const nameRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(nameInput);
-
-  // Add components
-  modal.addComponents(messageRow, nameRow);
-
-  // Show the modal
-  await interaction.showModal(modal);
+  await interaction.showModal(buildFlowerModal());
 }
 
 export async function handleFlowerModalSubmit(interaction: ModalSubmitInteraction) {
   // Defensive check: ensure this is the correct modal
-  if (interaction.customId !== 'flowerModal') return;
+  if (!interaction.customId.startsWith('flowerModal')) return;
+  const isEditSubmission = interaction.customId === 'flowerModal_edit';
 
   // Get form inputs
   const message = interaction.fields.getTextInputValue('flowerMessage');
@@ -341,6 +398,15 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
   // Update submission data with message and name
   submissionData.message = message;
   submissionData.name = nameInput;
+
+  if (isEditSubmission && submissionData.hasConsent !== undefined) {
+    const previewPayload = buildFinalPreviewPayload(submissionData, interaction.guild);
+    await interaction.reply({
+      ...previewPayload,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
   // Reply to modal submission
   await interaction.reply({
@@ -446,14 +512,43 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
 
   // Update consent
   submissionData.hasConsent = hasConsent;
+  await interaction.update(buildFinalPreviewPayload(submissionData, interaction.guild));
+}
 
-  // Show loading message immediately
+export async function handleFlowerFinalSubmitButton(interaction: ButtonInteraction) {
+  const customId = interaction.customId;
+  if (!customId.startsWith('flowerSubmit_')) return;
+
+  const submissionData = pendingSubmissions.get(interaction.user.id);
+  if (!submissionData) {
+    await interaction.reply({
+      content: '❌ Your submission data was not found. Please run /flower again.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (customId === 'flowerSubmit_cancel') {
+    pendingSubmissions.delete(interaction.user.id);
+    await interaction.update({
+      content: '🛑 Flower submission canceled. You can run /flower again anytime.',
+      components: [],
+    });
+    return;
+  }
+
+  if (customId === 'flowerSubmit_edit') {
+    await interaction.showModal(
+      buildFlowerModal(submissionData.message, submissionData.name, 'flowerModal_edit'),
+    );
+    return;
+  }
+
   await interaction.update({
     content: '⏳ Processing your submission... (uploading image, saving to sheets, etc.)',
-    components: [], // Remove buttons
+    components: [],
   });
 
-  // Process the flower submission directly
   await processFlowerSubmission(interaction, submissionData);
 }
 

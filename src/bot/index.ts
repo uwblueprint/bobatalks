@@ -4,6 +4,7 @@ import { Client, Events, GatewayIntentBits, Interaction, MessageFlags } from 'di
 
 import {
   flowerCommand,
+  handleFlowerFinalSubmitButton,
   handleFlowerModalSubmit,
   handleFlowerConsentButton,
   handleFlowerShareUsernameButton,
@@ -45,6 +46,8 @@ client.on('interactionCreate', async (interaction: Interaction) => {
         await handleFlowerConsentButton(interaction);
       } else if (interaction.customId.startsWith('flowerShareUsername_')) {
         await handleFlowerShareUsernameButton(interaction);
+      } else if (interaction.customId.startsWith('flowerSubmit_')) {
+        await handleFlowerFinalSubmitButton(interaction);
       } else if (interaction.customId.startsWith('moderationApprove_')) {
         await handleModerationApprove(interaction);
       } else if (interaction.customId.startsWith('moderationDecline_')) {
