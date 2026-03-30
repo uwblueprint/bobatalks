@@ -337,9 +337,6 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
   const previewMessage = mentionResolution?.outputText ?? emojiNormalizedMessage;
   const previewSnippet =
     previewMessage.length > 350 ? `${previewMessage.slice(0, 347)}...` : previewMessage;
-  const mentionPreview = submissionData.mentionUserId
-    ? `🔔 **Ping** · <@${submissionData.mentionUserId}>`
-    : '🔕 **Ping** · None';
   const mentionHint = submissionData.mentionUserId
     ? mentionResolution?.appendedMention && hasAtToken
       ? "Heads up: your @<name> didn't closely match the selected user, so the ping was appended at the end instead. Click Edit to adjust if needed."
@@ -362,9 +359,9 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
       '',
       `> ${previewSnippet.split('\n').join('\n> ')}`,
       '',
-      '─────────────────────',
+      '-# ───────────────────',
       `👤 **Author** · ${authorPreview}`,
-      mentionPreview,
+      `🔔 **Ping** · ${submissionData.mentionUserId ? `<@${submissionData.mentionUserId}>` : '—'}`,
       `🌐 **Website** · ${submissionData.hasConsent ? 'Consented' : 'Not consented'}`,
       `🖼️ **Image** · ${submissionData.attachment ? submissionData.attachment.filename : 'None'}`,
       ...(hints.length > 1
@@ -372,14 +369,12 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
         : hints.length === 1
           ? ['', ...hints]
           : []),
-      '',
-      '-# Ready to post?',
     ].join('\n'),
     components: [
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId('flowerSubmit_confirm')
-          .setLabel('Confirm & Post')
+          .setLabel('Post 🌸')
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
           .setCustomId('flowerSubmit_edit')
