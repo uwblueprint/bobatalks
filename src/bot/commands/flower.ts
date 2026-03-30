@@ -272,6 +272,7 @@ type PendingFlowerSubmission = {
   mentionAliases?: string[];
   hasConsent?: boolean;
   shareDiscordUsername?: boolean;
+  lastPreviewInteraction?: ModalSubmitInteraction;
 };
 
 const pendingSubmissions = new Map<string, PendingFlowerSubmission>();
@@ -488,6 +489,7 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
   submissionData.name = nameInput;
 
   if (isEditSubmission && submissionData.hasConsent !== undefined && !nameStatusChanged) {
+    const previousPreviewInteraction = submissionData.lastPreviewInteraction;
     const previewPayload = buildFinalPreviewPayload(
       submissionData,
       interaction.guild,
@@ -497,6 +499,14 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
       ...previewPayload,
       flags: MessageFlags.Ephemeral,
     });
+    submissionData.lastPreviewInteraction = interaction;
+    if (previousPreviewInteraction) {
+      try {
+        await previousPreviewInteraction.deleteReply();
+      } catch {
+        // Previous reply may have already been dismissed or expired — safe to ignore
+      }
+    }
     return;
   }
 
