@@ -692,17 +692,13 @@ async function buildFlowerMessage(
 }
 
 function createResponseMessage(hasConsent: boolean, imageUploadFailed?: boolean): string {
-  let message =
-    '✅ Your flower has been submitted! Thank you for sharing and celebrating with the community! 🌸';
+  let message = hasConsent
+    ? '✅ Your flower has been submitted! Thank you for celebrating with the community and consenting to be featured on the BobaTalks website! 🌸'
+    : '✅ Your flower has been submitted! Thank you for celebrating with the community! 🌸';
 
   if (imageUploadFailed) {
     message +=
       '\n\n⚠️ Note: There was an issue uploading your image, but your message was still submitted successfully.';
-  }
-
-  if (hasConsent) {
-    message +=
-      '\n\n💖 Thank you for consenting to feature your submission on the BobaTalks website!';
   }
 
   return message;
