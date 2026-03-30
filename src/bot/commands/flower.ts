@@ -367,7 +367,11 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
       mentionPreview,
       `🌐 **Website** · ${submissionData.hasConsent ? 'Consented' : 'Not consented'}`,
       `🖼️ **Image** · ${submissionData.attachment ? submissionData.attachment.filename : 'None'}`,
-      ...(hints.length > 0 ? ['', ...hints] : []),
+      ...(hints.length > 1
+        ? ['', '💡 **Heads up:**', ...hints.map((h) => `· ${h.replace(/^💡 /, '')}`)]
+        : hints.length === 1
+          ? ['', ...hints]
+          : []),
       '',
       '-# Ready to post?',
     ].join('\n'),
