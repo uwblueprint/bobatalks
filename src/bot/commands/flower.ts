@@ -324,7 +324,11 @@ function resolveDisplayNameForPreview(submissionData: PendingFlowerSubmission): 
   return 'Anonymous';
 }
 
-function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild: Guild | null) {
+function buildFinalPreviewPayload(
+  submissionData: PendingFlowerSubmission,
+  guild: Guild | null,
+  avatarUrl?: string,
+) {
   const emojiNormalizedMessage = normalizeFlowerInputForDiscord(submissionData.message, guild);
   const hasAtToken = /(^|[\s(])@[a-zA-Z0-9_.-]{2,32}/.test(emojiNormalizedMessage);
   const mentionResolution = submissionData.mentionUserId
@@ -335,8 +339,7 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
       )
     : null;
   const previewMessage = mentionResolution?.outputText ?? emojiNormalizedMessage;
-  const previewSnippet =
-    previewMessage.length > 350 ? `${previewMessage.slice(0, 347)}...` : previewMessage;
+
   const mentionHint = submissionData.mentionUserId
     ? mentionResolution?.appendedMention && hasAtToken
       ? "Your @token didn't match the selected user — ping appended at the end. Click Edit to adjust."
@@ -347,29 +350,32 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
   const imageHint = !submissionData.attachment
     ? 'No image attached. Cancel and rerun /flower with an image if you want one.'
     : null;
-  const authorPreview = resolveDisplayNameForPreview(submissionData);
-  const hints = [
-    ...(mentionHint ? [`💡 ${mentionHint}`] : []),
-    ...(imageHint ? [`💡 ${imageHint}`] : []),
-  ];
+  const hints = [...(mentionHint ? [mentionHint] : []), ...(imageHint ? [imageHint] : [])];
+
+  const displayName = resolveDisplayNameForPreview(submissionData);
+  const previewEmbed = new EmbedBuilder().setColor('#FF69B4').setAuthor({
+    name: displayName,
+    ...(avatarUrl ? { iconURL: avatarUrl } : {}),
+  });
+
+  const truncatedMessage =
+    previewMessage.length > 4096 ? `${previewMessage.slice(0, 4093)}...` : previewMessage;
+  previewEmbed.setDescription(truncatedMessage);
+
+  if (submissionData.attachment) {
+    previewEmbed.setImage(submissionData.attachment.url);
+  }
+
+  const hintsContent =
+    hints.length > 1
+      ? `💡 **Heads up:**\n${hints.map((h) => `· ${h}`).join('\n')}`
+      : hints.length === 1
+        ? `💡 ${hints[0]}`
+        : null;
 
   return {
-    content: [
-      '## 🌸 Flower Preview',
-      '',
-      `> ${previewSnippet.split('\n').join('\n> ')}`,
-      '',
-      '-# ───────────────────',
-      `👤 **Author** · ${authorPreview}`,
-      `🔔 **Ping** · ${submissionData.mentionUserId ? `<@${submissionData.mentionUserId}>` : '—'}`,
-      `🌐 **Website** · ${submissionData.hasConsent ? 'Consented' : 'Not consented'}`,
-      `🖼️ **Image** · ${submissionData.attachment ? submissionData.attachment.filename : 'None'}`,
-      ...(hints.length > 1
-        ? ['', '💡 **Heads up:**', ...hints.map((h) => `· ${h.replace(/^💡 /, '')}`)]
-        : hints.length === 1
-          ? ['', ...hints]
-          : []),
-    ].join('\n'),
+    ...(hintsContent ? { content: hintsContent } : {}),
+    embeds: [previewEmbed],
     components: [
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
         new ButtonBuilder()
@@ -485,7 +491,11 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
   submissionData.name = nameInput;
 
   if (isEditSubmission && submissionData.hasConsent !== undefined && !nameStatusChanged) {
-    const previewPayload = buildFinalPreviewPayload(submissionData, interaction.guild);
+    const previewPayload = buildFinalPreviewPayload(
+      submissionData,
+      interaction.guild,
+      interaction.user.displayAvatarURL(),
+    );
     await interaction.reply({
       ...previewPayload,
       flags: MessageFlags.Ephemeral,
@@ -605,7 +615,13 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
 
   // Update consent
   submissionData.hasConsent = hasConsent;
-  await interaction.update(buildFinalPreviewPayload(submissionData, interaction.guild));
+  await interaction.update(
+    buildFinalPreviewPayload(
+      submissionData,
+      interaction.guild,
+      interaction.user.displayAvatarURL(),
+    ),
+  );
 }
 
 export async function handleFlowerFinalSubmitButton(interaction: ButtonInteraction) {
