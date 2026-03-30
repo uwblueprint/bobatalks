@@ -83,7 +83,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
   // Handle modal submissions
   if (interaction.isModalSubmit()) {
     try {
-      if (interaction.customId === 'flowerModal') {
+      if (interaction.customId.startsWith('flowerModal')) {
         await handleFlowerModalSubmit(interaction);
       }
     } catch (error) {
