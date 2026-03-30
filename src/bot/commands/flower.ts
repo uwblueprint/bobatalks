@@ -276,6 +276,12 @@ type PendingFlowerSubmission = {
 };
 
 const pendingSubmissions = new Map<string, PendingFlowerSubmission>();
+const PENDING_SUBMISSION_TTL_MS = 30 * 60 * 1000;
+
+function setPendingSubmission(userId: string, data: PendingFlowerSubmission): void {
+  pendingSubmissions.set(userId, data);
+  setTimeout(() => pendingSubmissions.delete(userId), PENDING_SUBMISSION_TTL_MS);
+}
 
 function buildFlowerModal(
   messageValue = '',
@@ -420,7 +426,7 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
       return;
     }
 
-    pendingSubmissions.set(interaction.user.id, {
+    setPendingSubmission(interaction.user.id, {
       attachment: {
         url: attachment.url,
         contentType: attachment.contentType || 'image/png',
@@ -433,7 +439,7 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
       ...(mentionAliases.length > 0 ? { mentionAliases } : {}),
     });
   } else {
-    pendingSubmissions.set(interaction.user.id, {
+    setPendingSubmission(interaction.user.id, {
       message: '',
       name: '',
       username: interaction.user.username,
@@ -843,12 +849,7 @@ async function processFlowerSubmission(
       // Post the flower to the channel
       let publicMessageUrl: string | undefined;
       if (interaction.channel && 'send' in interaction.channel) {
-        // Mentions in embed descriptions don't trigger notifications — the mention
-        // must appear in message content. We extract any resolved mentions from the
-        // normalized message and include them as invisible content so pings fire.
-        const mentionTokens = [...normalizedMessage.matchAll(/<@(\d+)>/g)].map(([token]) => token);
         const publicMessage = await interaction.channel.send({
-          ...(mentionTokens.length > 0 ? { content: mentionTokens.join(' ') } : {}),
           embeds: flowerMessage.embeds,
           files: flowerMessage.files,
           allowedMentions: { parse: ['users'] },
