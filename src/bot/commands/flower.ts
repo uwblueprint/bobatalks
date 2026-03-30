@@ -89,8 +89,12 @@ function injectMentionIntoMessage(
   appendedMention: boolean;
   willNotify: boolean;
 } {
-  const AT_TOKEN_PATTERN = /(^|[\s(])@([a-zA-Z0-9_.-]{2,32})/g;
-  const normalizeAliasForComparison = (value: string): string =>
+  // Includes CJK unified ideographs, Hangul, Hiragana, Katakana so @tokens in
+  // those scripts are captured and compared directly before Latin normalization.
+  const AT_TOKEN_PATTERN =
+    /(^|[\s(])@([a-zA-Z0-9_.\u4e00-\u9fff\u3400-\u4dbf\uac00-\ud7af\u3040-\u309f\u30a0-\u30ff-]{2,32})/g;
+
+  const normalizeAliasForLatinComparison = (value: string): string =>
     value
       .toLowerCase()
       .normalize('NFKD')
@@ -123,11 +127,17 @@ function injectMentionIntoMessage(
   };
 
   const normalizedAliases = mentionAliases
-    .map(normalizeAliasForComparison)
+    .map(normalizeAliasForLatinComparison)
     .filter((alias) => alias.length >= 2);
 
+  const baseCollator = new Intl.Collator(undefined, { sensitivity: 'base' });
+
   const isLikelySelectedUserMention = (rawToken: string): boolean => {
-    const normalizedToken = normalizeAliasForComparison(rawToken);
+    // Pass 1: locale-aware base comparison (ignores case + diacritics) — handles CJK and exact names
+    if (mentionAliases.some((alias) => baseCollator.compare(alias, rawToken) === 0)) return true;
+
+    // Pass 2: Latin-normalized fuzzy match for diacritics, separators, and minor typos
+    const normalizedToken = normalizeAliasForLatinComparison(rawToken);
     if (!normalizedToken) return false;
 
     return normalizedAliases.some((alias) => {
