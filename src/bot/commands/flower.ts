@@ -287,7 +287,7 @@ function buildFlowerModal(
     .setCustomId('flowerMessage')
     .setLabel('Your Message')
     .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder('"Flowers to @jeff!"')
+    .setPlaceholder('Flowers to @jeff!')
     .setRequired(true)
     .setMaxLength(1000)
     .setMinLength(10);
