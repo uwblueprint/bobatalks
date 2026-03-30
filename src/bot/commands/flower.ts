@@ -300,11 +300,9 @@ function buildFlowerModal(
 
   const nameInput = new TextInputBuilder()
     .setCustomId('flowerName')
-    .setLabel('Your Name (Optional)')
+    .setLabel('Your Name')
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder(
-      'Leave blank if you prefer to submit anonymously or use your Discord username instead',
-    )
+    .setPlaceholder('Leave blank to post anonymously or as your Discord username')
     .setRequired(false)
     .setMaxLength(100);
 
