@@ -506,38 +506,23 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
     delete submissionData.shareDiscordUsername;
   }
 
-  // Reply to modal submission
-  await interaction.reply({
-    content: isEditSubmission
-      ? '✅ Got it! Please re-answer the question below since your name changed.'
-      : '✅ Thank you for your submission! Please answer the question below.',
-    flags: MessageFlags.Ephemeral,
-  });
+  const consentButtons = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('flowerConsent_yes')
+      .setLabel('Yes')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('flowerConsent_no').setLabel('No').setStyle(ButtonStyle.Danger),
+  );
 
-  // If name is provided, directly ask about website consent
-  // If name is not provided, first ask about sharing Discord username
   if (nameInput && nameInput.trim() !== '') {
-    // Name provided: directly ask about website consent
-    await interaction.followUp({
-      content: '💖 Would you like to consent to feature your submission on the BobaTalks website?',
+    await interaction.reply({
+      content: '💖 Feature this submission on the BobaTalks website?',
       flags: MessageFlags.Ephemeral,
-      components: [
-        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId('flowerConsent_yes')
-            .setLabel('Yes')
-            .setStyle(ButtonStyle.Success),
-          new ButtonBuilder()
-            .setCustomId('flowerConsent_no')
-            .setLabel('No')
-            .setStyle(ButtonStyle.Danger),
-        ),
-      ],
+      components: [consentButtons],
     });
   } else {
-    // No name provided: first ask about sharing Discord username
-    await interaction.followUp({
-      content: '💖 Would you like to share your Discord username with this submission?',
+    await interaction.reply({
+      content: '💖 Share your Discord username with this submission?',
       flags: MessageFlags.Ephemeral,
       components: [
         new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
@@ -575,9 +560,8 @@ export async function handleFlowerShareUsernameButton(interaction: ButtonInterac
   // Update shareDiscordUsername preference
   submissionData.shareDiscordUsername = shareUsername;
 
-  // Now ask about website consent
   await interaction.update({
-    content: '💖 Would you like to consent to feature your submission on the BobaTalks website?',
+    content: '💖 Feature this submission on the BobaTalks website?',
     components: [
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
         new ButtonBuilder()
