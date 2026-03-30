@@ -21,7 +21,7 @@ This project includes:
 | ------------ | ----------------------------------------------- |
 | Bot          | Node.js + TypeScript + discord.js               |
 | Web          | Next.js 15 + Tailwind CSS                       |
-| Database     | Supabase (PostgreSQL)                           |
+| Database     | Google Sheets + Google Drive                    |
 | CI/CD        | GitHub Actions                                  |
 | Code Quality | ESLint, Prettier, Husky, TypeScript strict mode |
 
@@ -208,7 +208,9 @@ pm2 startup systemd -u ubuntu --hp /home/ubuntu
 - **Auto**: Pushes to `main` deploy at 4 AM daily
 - **Manual**: GitHub → Actions → "Deploy BobaTalks" → Run workflow
 
-**4. Register commands** (after first deploy):
+**4. Register commands**:
+
+Commands are registered automatically on every deploy. To register manually (e.g. first-time setup before a deploy):
 
 ```bash
 ssh -i your-key.pem ubuntu@your-ec2-ip

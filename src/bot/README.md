@@ -86,35 +86,62 @@ npm start
 
 The bot currently supports the following slash commands:
 
-| Command       | Description                                                                          |
-| ------------- | ------------------------------------------------------------------------------------ |
-| `/ping`       | Health check - replies with "🏓 Pong!"                                               |
-| `/serverinfo` | Displays server statistics (name, member count, creation date)                       |
-| `/userinfo`   | Shows information about a user (or yourself)                                         |
-| `/poll`       | Creates an interactive poll with up to 5 options                                     |
-| `/welcome`    | Sends a welcome message to a user                                                    |
-| `/flower`     | Submit a flower 💐 - a message of acknowledgement, congratulations, or encouragement |
+| Command       | Description                                                                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------------------- |
+| `/ping`       | Health check - replies with "🏓 Pong!"                                                                         |
+| `/serverinfo` | Displays server statistics (name, member count, creation date)                                                 |
+| `/userinfo`   | Shows information about a user (or yourself)                                                                   |
+| `/poll`       | Creates an interactive poll with up to 5 options                                                               |
+| `/welcome`    | Sends a welcome message to a user                                                                              |
+| `/flower`     | Submit a flower 💐 — supports mentions, image attachments, website consent, and a draft preview before posting |
 
 The bot listens for slash command interactions and responds accordingly. It includes error handling and uses embeds for formatted responses.
 
 ### 🌸 Flower Command Details
 
-The `/flower` command opens an interactive modal form where users can submit messages of celebration, acknowledgement, or encouragement. This replicates the BobaTalks Google Form experience.
+The `/flower` command opens an interactive modal form where users can submit messages of celebration, acknowledgement, or encouragement.
 
-**Features:**
+**Options (set before the modal opens):**
 
-- **Message Field** (Required): Your celebration or acknowledgement message (10-1000 characters)
-- **Name Field** (Optional): Your name or leave blank to remain anonymous
-- **Image URL** (Optional): Link to your photo or any image (dog, graphic, etc.)
-- **Content Validation**: Simple profanity filter to keep messages positive and respectful
-- **Public Posting**: Submissions are posted to the channel with a beautiful embed
-- **Agreement**: By submitting, users agree to be featured on the BobaTalks website
-- **Admin Logging**: All submissions are logged to the `flowers-mod` channel for spam prevention and auditing
+| Option         | Type                  | Description                                              |
+| -------------- | --------------------- | -------------------------------------------------------- |
+| `mention_user` | User (optional)       | Who the flower is for — enables a real ping notification |
+| `image`        | Attachment (optional) | Image to include with the flower                         |
 
-**Example Uses:**
+**Modal fields:**
+
+| Field        | Required | Description                                                           |
+| ------------ | -------- | --------------------------------------------------------------------- |
+| Your Message | Yes      | The flower message (10–1000 characters)                               |
+| Your Name    | No       | Display name — leave blank to post anonymously or as Discord username |
+
+**Submission flow:**
+
+1. Run `/flower` (optionally select `mention_user` and/or attach an image)
+2. Fill out the modal
+3. Answer whether to share your Discord username (if no name provided) and consent to website feature
+4. **Review the final preview** — shows author, ping target, website consent, and image status
+5. Click **Confirm & Post**, **Edit** (reopens modal with prefilled values), or **Cancel**
+
+**Mention system:**
+
+- Select `mention_user` to ping someone — the bot guarantees a real notification fires
+- Use `@name` in your message to place the mention inline; the bot fuzzy-matches against the selected user's username, display name, and server nickname (supports Latin, CJK, Cyrillic)
+- If no `@token` matches closely, the mention is appended at the end automatically
+
+**Other features:**
+
+- Content filter (profanity) on message and name fields
+- Auto-reacts with 🌸 on the public post
+- Custom emoji shortcodes (`:meow_wow:`) are resolved to proper Discord tokens before posting
+- External server emoji tokens are stripped (bot can only render emojis from its own servers)
+- All submissions logged to `flowers-mod` channel for admin auditing
+- Approved submissions sent to `#moderation-workflow` for website review
+
+**Example messages:**
 
 - "I finally landed my first internship!"
-- "Shoutout to Eileen for being so supportive at my event last weekend!"
+- "Flowers to @jeff for the new job and completing his move!!"
 
 #### 🔐 Setting Up the Flowers-Mod Channel (Admin Only)
 
