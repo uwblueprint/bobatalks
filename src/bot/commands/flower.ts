@@ -313,8 +313,8 @@ function buildFlowerModal(
 
 function resolveDisplayNameForPreview(submissionData: PendingFlowerSubmission): string {
   const customName = submissionData.name?.trim();
-  if (customName) return `"${customName}" (custom name)`;
-  if (submissionData.shareDiscordUsername) return `${submissionData.username} (Discord username)`;
+  if (customName) return `${customName}`;
+  if (submissionData.shareDiscordUsername) return `${submissionData.username}`;
   return 'Anonymous';
 }
 
