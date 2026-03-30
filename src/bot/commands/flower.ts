@@ -62,6 +62,19 @@ function normalizeEmojiShortcodesToDiscordTokens(text: string, guild: Guild | nu
 }
 
 /**
+ * Strips <:name:id> and <a:name:id> tokens that the bot cannot render
+ * (i.e. emojis not present in the guild cache) to avoid broken embed output.
+ */
+function stripUnresolvableEmojiTokens(text: string, guild: Guild | null): string {
+  if (!guild) return text;
+
+  return text.replace(/<a?:[a-zA-Z0-9_]{2,32}:(\d+)>/g, (fullMatch, emojiId) => {
+    const isAccessible = guild.emojis.cache.has(emojiId);
+    return isAccessible ? fullMatch : '';
+  });
+}
+
+/**
  * Replaces @tokens that fuzzily match the selected user aliases.
  * Guarantees at least one canonical mention when mention_user is selected.
  */
@@ -173,7 +186,8 @@ function injectMentionIntoMessage(
 }
 
 function normalizeFlowerInputForDiscord(text: string, guild: Guild | null): string {
-  return normalizeEmojiShortcodesToDiscordTokens(text, guild);
+  const withResolvedShortcodes = normalizeEmojiShortcodesToDiscordTokens(text, guild);
+  return stripUnresolvableEmojiTokens(withResolvedShortcodes, guild);
 }
 
 /**
@@ -792,7 +806,12 @@ async function processFlowerSubmission(
       // Post the flower to the channel
       let publicMessageUrl: string | undefined;
       if (interaction.channel && 'send' in interaction.channel) {
+        // Mentions in embed descriptions don't trigger notifications — the mention
+        // must appear in message content. We extract any resolved mentions from the
+        // normalized message and include them as invisible content so pings fire.
+        const mentionTokens = [...normalizedMessage.matchAll(/<@(\d+)>/g)].map(([token]) => token);
         const publicMessage = await interaction.channel.send({
+          ...(mentionTokens.length > 0 ? { content: mentionTokens.join(' ') } : {}),
           embeds: flowerMessage.embeds,
           files: flowerMessage.files,
           allowedMentions: { parse: ['users'] },
