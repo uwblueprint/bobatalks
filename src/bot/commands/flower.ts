@@ -63,13 +63,19 @@ function normalizeEmojiShortcodesToDiscordTokens(text: string, guild: Guild | nu
 
 /**
  * Replaces @tokens that fuzzily match the selected user aliases.
- * If no @token exists, appends the canonical mention in parentheses.
+ * Guarantees at least one canonical mention when mention_user is selected.
  */
 function injectMentionIntoMessage(
   text: string,
   mentionUserId: string,
   mentionAliases: string[],
-): string {
+): {
+  outputText: string;
+  hasAtToken: boolean;
+  replacedTokenCount: number;
+  appendedMention: boolean;
+  willNotify: boolean;
+} {
   const AT_TOKEN_PATTERN = /(^|[\s(])@([a-zA-Z0-9_.-]{2,32})/g;
   const normalizeAliasForComparison = (value: string): string =>
     value
@@ -127,14 +133,43 @@ function injectMentionIntoMessage(
   };
 
   let sawAtToken = false;
+  let replacedTokenCount = 0;
   const replaced = text.replace(AT_TOKEN_PATTERN, (_, prefix: string, token: string) => {
     sawAtToken = true;
-    return isLikelySelectedUserMention(token)
-      ? `${prefix}<@${mentionUserId}>`
-      : `${prefix}@${token}`;
+    if (isLikelySelectedUserMention(token)) {
+      replacedTokenCount += 1;
+      return `${prefix}<@${mentionUserId}>`;
+    }
+    return `${prefix}@${token}`;
   });
 
-  return sawAtToken ? replaced : `${text} (<@${mentionUserId}>)`;
+  if (sawAtToken) {
+    if (replacedTokenCount === 0) {
+      return {
+        outputText: `${replaced} (<@${mentionUserId}>)`,
+        hasAtToken: true,
+        replacedTokenCount: 0,
+        appendedMention: true,
+        willNotify: true,
+      };
+    }
+
+    return {
+      outputText: replaced,
+      hasAtToken: true,
+      replacedTokenCount,
+      appendedMention: false,
+      willNotify: true,
+    };
+  }
+
+  return {
+    outputText: `${text} (<@${mentionUserId}>)`,
+    hasAtToken: false,
+    replacedTokenCount: 0,
+    appendedMention: true,
+    willNotify: true,
+  };
 }
 
 function normalizeFlowerInputForDiscord(text: string, guild: Guild | null): string {
@@ -262,18 +297,27 @@ function buildFlowerModal(
 
 function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild: Guild | null) {
   const emojiNormalizedMessage = normalizeFlowerInputForDiscord(submissionData.message, guild);
-  const previewMessage = submissionData.mentionUserId
+  const hasAtToken = /(^|[\s(])@[a-zA-Z0-9_.-]{2,32}/.test(emojiNormalizedMessage);
+  const mentionResolution = submissionData.mentionUserId
     ? injectMentionIntoMessage(
         emojiNormalizedMessage,
         submissionData.mentionUserId,
         submissionData.mentionAliases ?? [],
       )
-    : emojiNormalizedMessage;
+    : null;
+  const previewMessage = mentionResolution?.outputText ?? emojiNormalizedMessage;
   const previewSnippet =
     previewMessage.length > 350 ? `${previewMessage.slice(0, 347)}...` : previewMessage;
   const mentionPreview = submissionData.mentionUserId
     ? `✅ Mention will notify <@${submissionData.mentionUserId}> when you confirm.`
     : 'ℹ️ No mention selected; @name stays plain text.';
+  const mentionHint = submissionData.mentionUserId
+    ? mentionResolution?.appendedMention
+      ? "Heads up: your @ didn't closely match the selected user, so the mention will be appended at the end. Click Edit to adjust your mention if needed."
+      : null
+    : hasAtToken
+      ? 'Heads up: your @ will appear as plain text. Click Cancel and rerun /flower with mention_user selected to send a real ping.'
+      : null;
   const websitePreview = submissionData.hasConsent
     ? '✅ Website consent: Yes'
     : 'ℹ️ Website consent: No';
@@ -284,6 +328,7 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
       '',
       mentionPreview,
       websitePreview,
+      ...(mentionHint ? ['', `💡 ${mentionHint}`] : []),
       '',
       `📢 Message preview:\n${previewSnippet}`,
       '',
@@ -591,19 +636,9 @@ async function buildFlowerMessage(
   return { embeds: [embed], files };
 }
 
-function createResponseMessage(
-  hasConsent: boolean,
-  mentionUserId?: string,
-  imageUploadFailed?: boolean,
-): string {
+function createResponseMessage(hasConsent: boolean, imageUploadFailed?: boolean): string {
   let message =
     '✅ Your flower has been submitted! Thank you for sharing and celebrating with the community! 🌸';
-
-  if (mentionUserId) {
-    message += `\n\n✅ Mention will notify <@${mentionUserId}>.`;
-  } else {
-    message += '\n\nℹ️ No mention selected';
-  }
 
   if (imageUploadFailed) {
     message +=
@@ -652,9 +687,10 @@ async function processFlowerSubmission(
   } = submissionData;
 
   const emojiNormalizedMessage = normalizeFlowerInputForDiscord(originalMessage, interaction.guild);
-  const normalizedMessage = mentionUserId
+  const mentionResolution = mentionUserId
     ? injectMentionIntoMessage(emojiNormalizedMessage, mentionUserId, mentionAliases)
-    : emojiNormalizedMessage;
+    : null;
+  const normalizedMessage = mentionResolution?.outputText ?? emojiNormalizedMessage;
 
   const normalizedNameInput = normalizeFlowerInputForDiscord(originalNameInput, interaction.guild);
 
@@ -737,7 +773,7 @@ async function processFlowerSubmission(
     // Detect image upload failure if attachment present but no drive URL
     const imageUploadFailed = !!(attachmentData && !driveImageUrl);
 
-    const responseMessage = createResponseMessage(hasConsent, mentionUserId, imageUploadFailed);
+    const responseMessage = createResponseMessage(hasConsent, imageUploadFailed);
 
     try {
       // Use editReply if interaction was deferred, otherwise use update
