@@ -272,7 +272,7 @@ type PendingFlowerSubmission = {
   mentionAliases?: string[];
   hasConsent?: boolean;
   shareDiscordUsername?: boolean;
-  lastPreviewInteraction?: ModalSubmitInteraction;
+  lastPreviewInteraction?: ModalSubmitInteraction | ButtonInteraction;
 };
 
 const pendingSubmissions = new Map<string, PendingFlowerSubmission>();
@@ -612,6 +612,7 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
 
   // Update consent
   submissionData.hasConsent = hasConsent;
+  submissionData.lastPreviewInteraction = interaction;
   await interaction.update(
     buildFinalPreviewPayload(
       submissionData,
@@ -651,7 +652,7 @@ export async function handleFlowerFinalSubmitButton(interaction: ButtonInteracti
   }
 
   await interaction.update({
-    content: '⏳ Processing your submission... (uploading image, saving to sheets, etc.)',
+    content: '⏳ Posting your flower...',
     components: [],
   });
 
