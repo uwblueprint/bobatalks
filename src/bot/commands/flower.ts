@@ -324,13 +324,13 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
     previewMessage.length > 350 ? `${previewMessage.slice(0, 347)}...` : previewMessage;
   const mentionPreview = submissionData.mentionUserId
     ? `✅ Pinging <@${submissionData.mentionUserId}>`
-    : 'ℹ️ No mention selected; @name stays plain text.';
+    : 'ℹ️ No mention selected; @<name> stays plain text.';
   const mentionHint = submissionData.mentionUserId
     ? mentionResolution?.appendedMention && hasAtToken
-      ? "Heads up: your @token didn't closely match the selected user, so the ping was appended at the end instead. Click Edit to adjust if needed."
+      ? "Heads up: your @<name> didn't closely match the selected user, so the ping was appended at the end instead. Click Edit to adjust if needed."
       : null
     : hasAtToken
-      ? 'Heads up: your @text will appear as plain text. Click Cancel and rerun /flower with mention_user selected to send a real ping.'
+      ? 'Heads up: your @<name> will appear as plain text. Click Cancel and rerun /flower with mention_user selected to send a real ping.'
       : null;
   const websitePreview = submissionData.hasConsent
     ? '✅ Website consent: Yes'
