@@ -849,12 +849,8 @@ async function processFlowerSubmission(
         });
         publicMessageUrl = publicMessage.url;
 
-        // Auto-react with a flower emoji
         try {
-          const flowerEmoji = interaction.guild?.emojis.cache.find(
-            (e) => e.name === 'flower_strawberry_alice',
-          );
-          await publicMessage.react(flowerEmoji ?? '🌸');
+          await publicMessage.react('🌸');
         } catch (reactError) {
           console.warn('Could not auto-react to flower message:', reactError);
         }
