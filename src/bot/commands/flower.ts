@@ -342,8 +342,8 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
   const previewSnippet =
     previewMessage.length > 350 ? `${previewMessage.slice(0, 347)}...` : previewMessage;
   const mentionPreview = submissionData.mentionUserId
-    ? `✅ Pinging <@${submissionData.mentionUserId}>`
-    : 'ℹ️ No mention selected';
+    ? `🔔 **Ping** · <@${submissionData.mentionUserId}>`
+    : '🔕 **Ping** · None';
   const mentionHint = submissionData.mentionUserId
     ? mentionResolution?.appendedMention && hasAtToken
       ? "Heads up: your @<name> didn't closely match the selected user, so the ping was appended at the end instead. Click Edit to adjust if needed."
@@ -351,31 +351,29 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
     : hasAtToken
       ? 'Heads up: your @<name> will appear as plain text. Click Cancel and rerun /flower with mention_user selected to send a real ping.'
       : null;
-  const websitePreview = submissionData.hasConsent
-    ? '✅ Website consent: Yes'
-    : 'ℹ️ Website consent: No';
-  const imagePreview = submissionData.attachment
-    ? `🖼️ Image attachment: ${submissionData.attachment.filename}`
-    : 'ℹ️ Image attachment: None';
   const imageHint = !submissionData.attachment
     ? 'Heads up: no image will be included. Click Cancel and rerun /flower with an image attached if you want one.'
     : null;
-  const authorPreview = `👤 Posted as: ${resolveDisplayNameForPreview(submissionData)}`;
+  const authorPreview = resolveDisplayNameForPreview(submissionData);
+  const hints = [
+    ...(mentionHint ? [`💡 ${mentionHint}`] : []),
+    ...(imageHint ? [`💡 ${imageHint}`] : []),
+  ];
 
   return {
     content: [
-      '🧾 Final preview before posting:',
+      '## 🌸 Flower Preview',
       '',
-      authorPreview,
+      `> ${previewSnippet.split('\n').join('\n> ')}`,
+      '',
+      '─────────────────────',
+      `👤 **Author** · ${authorPreview}`,
       mentionPreview,
-      websitePreview,
-      imagePreview,
-      ...(mentionHint ? ['', `💡 ${mentionHint}`] : []),
-      ...(imageHint ? [`💡 ${imageHint}`] : []),
+      `🌐 **Website** · ${submissionData.hasConsent ? 'Consented' : 'Not consented'}`,
+      `🖼️ **Image** · ${submissionData.attachment ? submissionData.attachment.filename : 'None'}`,
+      ...(hints.length > 0 ? ['', ...hints] : []),
       '',
-      `📢 Message preview:\n${previewSnippet}`,
-      '',
-      'Post this flower now?',
+      '-# Ready to post?',
     ].join('\n'),
     components: [
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
