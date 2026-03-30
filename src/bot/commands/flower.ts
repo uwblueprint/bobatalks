@@ -371,7 +371,7 @@ function buildFinalPreviewPayload(
         : null;
 
   return {
-    ...(hintsContent ? { content: hintsContent } : {}),
+    content: hintsContent ?? '',
     embeds: [previewEmbed],
     components: [
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
