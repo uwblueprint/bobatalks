@@ -313,7 +313,7 @@ function buildFlowerModal(
   );
   const nameRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(nameInput);
 
-  modal.addComponents(messageRow, nameRow);
+  modal.addComponents(nameRow, messageRow);
   return modal;
 }
 
