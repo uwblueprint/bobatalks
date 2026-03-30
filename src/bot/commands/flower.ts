@@ -343,8 +343,8 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
     ? '✅ Website consent: Yes'
     : 'ℹ️ Website consent: No';
   const imagePreview = submissionData.attachment
-    ? `🖼️ Image attached: ${submissionData.attachment.filename}`
-    : 'ℹ️ No image attached';
+    ? `🖼️ Image attachment: ${submissionData.attachment.filename}`
+    : 'ℹ️ Image attachment: None';
   const authorPreview = `👤 Posted as: ${resolveDisplayNameForPreview(submissionData)}`;
 
   return {
