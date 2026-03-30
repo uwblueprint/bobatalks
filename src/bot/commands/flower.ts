@@ -333,7 +333,7 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
     previewMessage.length > 350 ? `${previewMessage.slice(0, 347)}...` : previewMessage;
   const mentionPreview = submissionData.mentionUserId
     ? `✅ Pinging <@${submissionData.mentionUserId}>`
-    : 'ℹ️ No mention selected; @<name> stays plain text.';
+    : 'ℹ️ No mention selected';
   const mentionHint = submissionData.mentionUserId
     ? mentionResolution?.appendedMention && hasAtToken
       ? "Heads up: your @<name> didn't closely match the selected user, so the ping was appended at the end instead. Click Edit to adjust if needed."
@@ -347,6 +347,9 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
   const imagePreview = submissionData.attachment
     ? `🖼️ Image attachment: ${submissionData.attachment.filename}`
     : 'ℹ️ Image attachment: None';
+  const imageHint = !submissionData.attachment
+    ? 'Heads up: no image will be included. Click Cancel and rerun /flower with an image attached if you want one.'
+    : null;
   const authorPreview = `👤 Posted as: ${resolveDisplayNameForPreview(submissionData)}`;
 
   return {
@@ -358,6 +361,7 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
       websitePreview,
       imagePreview,
       ...(mentionHint ? ['', `💡 ${mentionHint}`] : []),
+      ...(imageHint ? [`💡 ${imageHint}`] : []),
       '',
       `📢 Message preview:\n${previewSnippet}`,
       '',
