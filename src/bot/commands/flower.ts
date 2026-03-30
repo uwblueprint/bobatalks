@@ -292,7 +292,9 @@ function buildFlowerModal(
     .setCustomId('flowerName')
     .setLabel('Your Name (Optional)')
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder('e.g. John Doe')
+    .setPlaceholder(
+      'Leave blank if you prefer to submit anonymously or use your Discord username instead',
+    )
     .setRequired(false)
     .setMaxLength(100);
 
