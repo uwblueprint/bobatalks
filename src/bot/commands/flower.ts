@@ -281,7 +281,7 @@ function buildFlowerModal(
   nameValue = '',
   customId = 'flowerModal',
 ): ModalBuilder {
-  const modal = new ModalBuilder().setCustomId(customId).setTitle('Submit Flowers 💐');
+  const modal = new ModalBuilder().setCustomId(customId).setTitle('Submit Flower 🌸');
 
   const messageInput = new TextInputBuilder()
     .setCustomId('flowerMessage')
