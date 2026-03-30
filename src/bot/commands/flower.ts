@@ -302,7 +302,7 @@ function buildFlowerModal(
     .setCustomId('flowerName')
     .setLabel('Your Name')
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Leave blank to post anonymously or as your Discord username')
+    .setPlaceholder('Leave blank to post anonymously')
     .setRequired(false)
     .setMaxLength(100);
 
