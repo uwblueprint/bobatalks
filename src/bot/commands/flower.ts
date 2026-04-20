@@ -18,6 +18,7 @@ import {
   Guild,
   GuildMember,
 } from 'discord.js';
+import { emojify } from 'node-emoji';
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 
 import { generateFlowerCard } from '../flowerCard.js';
@@ -62,15 +63,37 @@ function normalizeEmojiShortcodesToDiscordTokens(text: string, guild: Guild | nu
 }
 
 /**
- * Strips <:name:id> and <a:name:id> tokens that the bot cannot render
- * (i.e. emojis not present in the guild cache) to avoid broken embed output.
+ * Replaces <:name:id> and <a:name:id> tokens whose emoji is not present in the
+ * guild cache with the bare :name: form so the intent stays visible on both
+ * Discord (as text) and the website. Collects replaced names into `collector`
+ * so callers can surface a preview hint.
  */
-function stripUnresolvableEmojiTokens(text: string, guild: Guild | null): string {
+function softenUnresolvableEmojiTokens(
+  text: string,
+  guild: Guild | null,
+  collector: Set<string>,
+): string {
   if (!guild) return text;
 
-  return text.replace(/<a?:[a-zA-Z0-9_]{2,32}:(\d+)>/g, (fullMatch, emojiId) => {
+  return text.replace(/<a?:([a-zA-Z0-9_]{2,32}):(\d+)>/g, (fullMatch, emojiName, emojiId) => {
     const isAccessible = guild.emojis.cache.has(emojiId);
-    return isAccessible ? fullMatch : '';
+    if (isAccessible) return fullMatch;
+    collector.add(emojiName);
+    return `:${emojiName}:`;
+  });
+}
+
+/**
+ * Expands standard unicode emoji shortcodes (e.g. :rose: → 🌹). Shortcodes
+ * that match neither a BT custom emoji nor a known unicode emoji are kept
+ * as-is and reported via `collector`.
+ */
+function expandUnicodeEmojiShortcodes(text: string, collector: Set<string>): string {
+  return emojify(text, {
+    fallback: (name) => {
+      collector.add(name);
+      return `:${name}:`;
+    },
   });
 }
 
@@ -195,9 +218,22 @@ function injectMentionIntoMessage(
   };
 }
 
-function normalizeFlowerInputForDiscord(text: string, guild: Guild | null): string {
+function normalizeFlowerInputForDiscord(
+  text: string,
+  guild: Guild | null,
+): { outputText: string; unresolvableEmojiNames: string[] } {
+  const unresolvable = new Set<string>();
   const withResolvedShortcodes = normalizeEmojiShortcodesToDiscordTokens(text, guild);
-  return stripUnresolvableEmojiTokens(withResolvedShortcodes, guild);
+  const withSoftenedTokens = softenUnresolvableEmojiTokens(
+    withResolvedShortcodes,
+    guild,
+    unresolvable,
+  );
+  const withExpandedUnicode = expandUnicodeEmojiShortcodes(withSoftenedTokens, unresolvable);
+  return {
+    outputText: withExpandedUnicode,
+    unresolvableEmojiNames: Array.from(unresolvable),
+  };
 }
 
 /**
@@ -205,6 +241,7 @@ function normalizeFlowerInputForDiscord(text: string, guild: Guild | null): stri
  * This helps prevent spam and tracks anonymous submissions.
  */
 const FLOWERS_MOD_CHANNEL_ID = '1082514729311948850';
+const FLOWER_REACT_EMOJI_NAME = 'flower_strawberry_alice';
 
 async function logFlowerUsageToModChannel(
   guild: Guild | null,
@@ -268,6 +305,7 @@ type PendingFlowerSubmission = {
   message: string;
   name: string;
   username: string;
+  serverDisplayName: string;
   mentionUserId?: string;
   mentionAliases?: string[];
   hasConsent?: boolean;
@@ -327,16 +365,13 @@ function buildFlowerModal(
 function resolveDisplayNameForPreview(submissionData: PendingFlowerSubmission): string {
   const customName = submissionData.name?.trim();
   if (customName) return `${customName}`;
-  if (submissionData.shareDiscordUsername) return `${submissionData.username}`;
+  if (submissionData.shareDiscordUsername) return `${submissionData.serverDisplayName}`;
   return 'Anonymous';
 }
 
-function buildFinalPreviewPayload(
-  submissionData: PendingFlowerSubmission,
-  guild: Guild | null,
-  avatarUrl?: string,
-) {
-  const emojiNormalizedMessage = normalizeFlowerInputForDiscord(submissionData.message, guild);
+function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild: Guild | null) {
+  const { outputText: emojiNormalizedMessage, unresolvableEmojiNames } =
+    normalizeFlowerInputForDiscord(submissionData.message, guild);
   const hasAtToken = /(^|[\s(])@[a-zA-Z0-9_.-]{2,32}/.test(emojiNormalizedMessage);
   const mentionResolution = submissionData.mentionUserId
     ? injectMentionIntoMessage(
@@ -349,18 +384,22 @@ function buildFinalPreviewPayload(
 
   const mentionHint = submissionData.mentionUserId
     ? mentionResolution?.appendedMention && hasAtToken
-      ? "Your @name didn't match the selected user — ping appended at the end. Click Edit to adjust."
+      ? '⚠️ The flower recipient does not match the user to be mentioned. Click Edit to adjust.\n-# Otherwise, a ping has been appended at the end of the flower message.'
       : null
     : hasAtToken
-      ? 'Your @name will appear as plain text. Select mention_user when running /flower to send a real ping.'
+      ? '⚠️ The flower recipient will not be pinged.\n-# Cancel and rerun /flower with mention_user to send a ping with your flower mention.'
       : null;
-  const hints = [...(mentionHint ? [mentionHint] : [])];
+  const unresolvableEmojiHint =
+    unresolvableEmojiNames.length > 0
+      ? `⚠️ Some emojis in your message won't render and will appear as text.\n-# Unresolved: ${unresolvableEmojiNames.map((name) => `\`:${name}:\``).join(', ')}`
+      : null;
+  const hints = [
+    ...(mentionHint ? [mentionHint] : []),
+    ...(unresolvableEmojiHint ? [unresolvableEmojiHint] : []),
+  ];
 
   const displayName = resolveDisplayNameForPreview(submissionData);
-  const previewEmbed = new EmbedBuilder().setColor('#FF69B4').setAuthor({
-    name: displayName,
-    ...(avatarUrl ? { iconURL: avatarUrl } : {}),
-  });
+  const previewEmbed = new EmbedBuilder().setColor('#FF69B4').setAuthor({ name: displayName });
 
   const truncatedMessage =
     previewMessage.length > 4096 ? `${previewMessage.slice(0, 4093)}...` : previewMessage;
@@ -372,9 +411,9 @@ function buildFinalPreviewPayload(
 
   const hintsContent =
     hints.length > 1
-      ? `💡 **Heads up:**\n${hints.map((h) => `· ${h}`).join('\n')}`
+      ? `**Heads up:**\n${hints.map((h) => `· ${h}`).join('\n')}`
       : hints.length === 1
-        ? `💡 ${hints[0]}`
+        ? hints[0]
         : null;
 
   return {
@@ -415,6 +454,9 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
       ]
     : [];
 
+  const submitterMember = interaction.member as GuildMember | null;
+  const serverDisplayName = submitterMember?.displayName ?? interaction.user.username;
+
   // Validate attachment is an image if provided
   if (attachment) {
     const contentType = attachment.contentType || '';
@@ -435,6 +477,7 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
       message: '',
       name: '',
       username: interaction.user.username,
+      serverDisplayName,
       ...(mentionUser ? { mentionUserId: mentionUser.id } : {}),
       ...(mentionAliases.length > 0 ? { mentionAliases } : {}),
     });
@@ -443,6 +486,7 @@ export async function flowerCommand(interaction: ChatInputCommandInteraction) {
       message: '',
       name: '',
       username: interaction.user.username,
+      serverDisplayName,
       ...(mentionUser ? { mentionUserId: mentionUser.id } : {}),
       ...(mentionAliases.length > 0 ? { mentionAliases } : {}),
     });
@@ -521,15 +565,20 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
     new ButtonBuilder().setCustomId('flowerConsent_no').setLabel('No').setStyle(ButtonStyle.Danger),
   );
 
+  const websiteFeaturePrompt = normalizeEmojiShortcodesToDiscordTokens(
+    ':sparkle_alice: Submit flower to be considered for feature on the BobaTalks website?',
+    interaction.guild,
+  );
+
   if (nameInput && nameInput.trim() !== '') {
     await interaction.reply({
-      content: '💖 Feature this submission on the BobaTalks website?',
+      content: websiteFeaturePrompt,
       flags: MessageFlags.Ephemeral,
       components: [consentButtons],
     });
   } else {
     await interaction.reply({
-      content: '💖 Share your Discord username with this submission?',
+      content: `🫣 Share your display name (**${submissionData.serverDisplayName}**) with this submission?`,
       flags: MessageFlags.Ephemeral,
       components: [
         new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
@@ -568,7 +617,10 @@ export async function handleFlowerShareUsernameButton(interaction: ButtonInterac
   submissionData.shareDiscordUsername = shareUsername;
 
   await interaction.update({
-    content: '💖 Feature this submission on the BobaTalks website?',
+    content: normalizeEmojiShortcodesToDiscordTokens(
+      ':sparkle_alice: Submit flower to be considered for feature on the BobaTalks website?',
+      interaction.guild,
+    ),
     components: [
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
         new ButtonBuilder()
@@ -604,13 +656,7 @@ export async function handleFlowerConsentButton(interaction: ButtonInteraction) 
   // Update consent
   submissionData.hasConsent = hasConsent;
   submissionData.lastPreviewInteraction = interaction;
-  await interaction.update(
-    buildFinalPreviewPayload(
-      submissionData,
-      interaction.guild,
-      interaction.user.displayAvatarURL(),
-    ),
-  );
+  await interaction.update(buildFinalPreviewPayload(submissionData, interaction.guild));
 }
 
 export async function handleFlowerFinalSubmitButton(interaction: ButtonInteraction) {
@@ -629,7 +675,7 @@ export async function handleFlowerFinalSubmitButton(interaction: ButtonInteracti
   if (customId === 'flowerSubmit_cancel') {
     pendingSubmissions.delete(interaction.user.id);
     await interaction.update({
-      content: '🛑 Flower submission canceled. You can run /flower again anytime.',
+      content: '🚫 Flower submission canceled.',
       components: [],
     });
     return;
@@ -689,10 +735,17 @@ async function buildFlowerMessage(
   return { embeds: [embed], files };
 }
 
-function createResponseMessage(hasConsent: boolean, imageUploadFailed?: boolean): string {
-  let message = hasConsent
-    ? '✅ Your flower has been submitted! Thank you for celebrating with the community and consenting to be featured on the BobaTalks website! 🌸'
-    : '✅ Your flower has been submitted! Thank you for celebrating with the community! 🌸';
+function createResponseMessage(
+  hasConsent: boolean,
+  guild: Guild | null,
+  imageUploadFailed?: boolean,
+): string {
+  let message = normalizeEmojiShortcodesToDiscordTokens(
+    hasConsent
+      ? ':flower_strawberry_alice: Flower submitted!\n-# Thank you for celebrating with the community and consenting to be featured on the BobaTalks website ~ :bobahearts_alice:\n-# Once your flower passes a review, it will join other flowers featured on the BobaTalks website!'
+      : ':flower_strawberry_alice: Flower posted!\n-# Thank you for celebrating with the community ~ :bobahearts_alice:',
+    guild,
+  );
 
   if (imageUploadFailed) {
     message +=
@@ -713,16 +766,7 @@ async function rollbackFlowerEntry(createdFlowerId: string): Promise<void> {
 
 async function processFlowerSubmission(
   interaction: ButtonInteraction,
-  submissionData: {
-    attachment?: { url: string; contentType: string; filename: string };
-    message: string;
-    name: string;
-    username: string;
-    mentionUserId?: string;
-    mentionAliases?: string[];
-    hasConsent?: boolean;
-    shareDiscordUsername?: boolean;
-  },
+  submissionData: PendingFlowerSubmission,
 ) {
   const {
     attachment: attachmentData,
@@ -735,13 +779,19 @@ async function processFlowerSubmission(
     shareDiscordUsername = false,
   } = submissionData;
 
-  const emojiNormalizedMessage = normalizeFlowerInputForDiscord(originalMessage, interaction.guild);
+  const { outputText: emojiNormalizedMessage } = normalizeFlowerInputForDiscord(
+    originalMessage,
+    interaction.guild,
+  );
   const mentionResolution = mentionUserId
     ? injectMentionIntoMessage(emojiNormalizedMessage, mentionUserId, mentionAliases)
     : null;
   const normalizedMessage = mentionResolution?.outputText ?? emojiNormalizedMessage;
 
-  const normalizedNameInput = normalizeFlowerInputForDiscord(originalNameInput, interaction.guild);
+  const { outputText: normalizedNameInput } = normalizeFlowerInputForDiscord(
+    originalNameInput,
+    interaction.guild,
+  );
 
   let createdFlowerId: string | undefined;
   let driveImageUrl: string | undefined;
@@ -822,7 +872,7 @@ async function processFlowerSubmission(
     // Detect image upload failure if attachment present but no drive URL
     const imageUploadFailed = !!(attachmentData && !driveImageUrl);
 
-    const responseMessage = createResponseMessage(hasConsent, imageUploadFailed);
+    const responseMessage = createResponseMessage(hasConsent, interaction.guild, imageUploadFailed);
 
     try {
       // Use editReply if interaction was deferred, otherwise use update
@@ -849,7 +899,10 @@ async function processFlowerSubmission(
         publicMessageUrl = publicMessage.url;
 
         try {
-          await publicMessage.react('🌸');
+          const customReactEmoji = interaction.guild?.emojis.cache.find(
+            (emoji) => emoji.name === FLOWER_REACT_EMOJI_NAME,
+          );
+          await publicMessage.react(customReactEmoji ?? '🌸');
         } catch (reactError) {
           console.warn('Could not auto-react to flower message:', reactError);
         }
