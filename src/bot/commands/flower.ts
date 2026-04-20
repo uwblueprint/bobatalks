@@ -578,7 +578,7 @@ export async function handleFlowerModalSubmit(interaction: ModalSubmitInteractio
     });
   } else {
     await interaction.reply({
-      content: `🫣 Share your display name (**${submissionData.serverDisplayName}**) with this submission?`,
+      content: '🫣 Share your display name with this submission?',
       flags: MessageFlags.Ephemeral,
       components: [
         new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
