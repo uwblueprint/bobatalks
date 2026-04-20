@@ -369,6 +369,16 @@ function resolveDisplayNameForPreview(submissionData: PendingFlowerSubmission): 
   return 'Anonymous';
 }
 
+function buildPostButton(guild: Guild | null): ButtonBuilder {
+  const button = new ButtonBuilder()
+    .setCustomId('flowerSubmit_confirm')
+    .setLabel('Post')
+    .setStyle(ButtonStyle.Success);
+
+  const customEmoji = guild?.emojis.cache.find((emoji) => emoji.name === FLOWER_REACT_EMOJI_NAME);
+  return customEmoji ? button.setEmoji(customEmoji.id) : button.setEmoji('🌸');
+}
+
 function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild: Guild | null) {
   const { outputText: emojiNormalizedMessage, unresolvableEmojiNames } =
     normalizeFlowerInputForDiscord(submissionData.message, guild);
@@ -421,10 +431,7 @@ function buildFinalPreviewPayload(submissionData: PendingFlowerSubmission, guild
     embeds: [previewEmbed],
     components: [
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId('flowerSubmit_confirm')
-          .setLabel('Post 🌸')
-          .setStyle(ButtonStyle.Success),
+        buildPostButton(guild),
         new ButtonBuilder()
           .setCustomId('flowerSubmit_edit')
           .setLabel('Edit')
