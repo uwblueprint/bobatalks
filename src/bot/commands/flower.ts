@@ -749,7 +749,7 @@ function createResponseMessage(
 ): string {
   let message = normalizeEmojiShortcodesToDiscordTokens(
     hasConsent
-      ? ':flower_strawberry_alice: Flower submitted!\n-# Thank you for celebrating with the community and consenting to be featured on the BobaTalks website ~ :bobahearts_alice:\n-# Once your flower passes a review, it will join other flowers featured on the BobaTalks website!'
+      ? ':flower_strawberry_alice: Flower submitted!\n-# Thank you for celebrating with the community and consenting to be featured on the BobaTalks website ~ :bobahearts_alice:'
       : ':flower_strawberry_alice: Flower posted!\n-# Thank you for celebrating with the community ~ :bobahearts_alice:',
     guild,
   );
