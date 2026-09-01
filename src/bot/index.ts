@@ -9,33 +9,15 @@ import {
   handleFlowerConsentButton,
   handleFlowerShareUsernameButton,
 } from './commands/flower.js';
-import {
-  handleFlowerChannelMessage,
-  handleModerationApprove,
-  handleModerationDecline,
-} from './moderationWorkflow.js';
+import { handleModerationApprove, handleModerationDecline } from './moderationWorkflow.js';
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    // GatewayIntentBits.GuildMembers, // Uncomment if you enable this privileged intent in Discord Developer Portal
-  ],
+  intents: [GatewayIntentBits.Guilds],
 });
 
 client.once(Events.ClientReady, (c) => {
   console.log(`✅ Logged in as ${c.user.tag}`);
   console.log(`📊 Serving ${c.guilds.cache.size} server(s)`);
-});
-
-// Listen for messages in the flowers channel for moderation workflow
-client.on(Events.MessageCreate, async (message) => {
-  try {
-    await handleFlowerChannelMessage(message);
-  } catch (error) {
-    console.error('Error handling flower channel message:', error);
-  }
 });
 
 client.on('interactionCreate', async (interaction: Interaction) => {
